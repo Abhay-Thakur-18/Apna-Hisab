@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 import os
+from app.core.config import settings
 from app.core.database import connect_to_mongo, close_mongo_connection
 from app.api.auth import router as auth_router
 from app.api.transactions import router as transactions_router
