@@ -1,6 +1,6 @@
 import httpx
 import logging
-from typing import Optional, dict
+from typing import Optional
 from app.core.config import settings
 
 logger = logging.getLogger("apna_hisab.auth.google")

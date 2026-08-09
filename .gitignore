@@ -20,9 +20,11 @@ venv/
 pip-log.txt
 pip-delete-this-directory.txt
 .pytest_cache/
-.coverage
 htmlcov/
 .env
+*.env
+mobile/.env
+backend/.env
 
 # Android Specific
 *.apk
