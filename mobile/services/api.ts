@@ -159,6 +159,8 @@ const localApiRequest = async (endpoint: string, options: RequestInit = {}): Pro
         time: body.time,
         description: body.description || '',
         khata_id: body.khata_id || null,
+        khata_type: body.khata_type || null,
+        client_ref_id: clientRefId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };

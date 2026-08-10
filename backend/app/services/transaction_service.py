@@ -92,6 +92,7 @@ async def create_transaction(user_id: str, tx_in: TransactionCreate) -> dict:
         "time": tx_in.time,
         "description": tx_in.description,
         "khata_id": khata_oid,
+        "khata_type": tx_in.khata_type,
         "recurring_id": None,
         "client_ref_id": tx_in.client_ref_id,
         "created_at": datetime.now(timezone.utc),

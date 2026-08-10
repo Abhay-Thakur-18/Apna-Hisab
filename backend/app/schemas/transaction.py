@@ -12,6 +12,7 @@ class TransactionBase(BaseModel):
     time: str = Field(..., description="HH:MM:SS format")
     description: Optional[str] = ""
     khata_id: Optional[str] = Field(None, description="Optional associated Khata Account ID")
+    khata_type: Optional[str] = Field(None, description="udhar_diya or udhar_liya")
     client_ref_id: Optional[str] = Field(None, description="Unique client-side reference ID for offline idempotency")
 
 class TransactionCreate(TransactionBase):
@@ -30,6 +31,7 @@ class TransactionUpdate(BaseModel):
     status: Optional[str] = Field(None, description="paid, pending, or partially_paid")
     paid_amount: Optional[int] = Field(None, description="Paid amount in paise")
     khata_id: Optional[str] = Field(None, description="Optional associated Khata Account ID")
+    khata_type: Optional[str] = Field(None, description="udhar_diya or udhar_liya")
 
 class TransactionResponse(TransactionBase):
     id: str
@@ -60,6 +62,8 @@ class KhataAccountResponse(KhataAccountBase):
     total_pending: int = 0
     total_paid: int = 0
     outstanding: int = 0
+    total_udhar_diya_pending: int = 0
+    total_udhar_liya_pending: int = 0
     created_at: datetime
     updated_at: datetime
 

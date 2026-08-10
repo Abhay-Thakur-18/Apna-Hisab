@@ -24,7 +24,7 @@ import { shareAsync } from 'expo-sharing';
 import { getDocumentAsync } from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ navigation }: any) {
   const { user, logout, appPin, setAppPin } = useAuthStore();
   const { khataAccounts, fetchKhataAccounts } = useTransactionStore();
   const { theme, setTheme } = useThemeStore();
@@ -422,15 +422,19 @@ export default function SettingsScreen() {
       
       <ScrollView contentContainerStyle={tw`p-6 pb-24`}>
         {/* User Card */}
-        <View style={[tw`border rounded-3xl p-6 shadow-sm mb-6 items-center`, { backgroundColor: cardBg, borderColor }]}>
-          <View style={tw`w-20 h-20 bg-indigo-100 rounded-full justify-center items-center mb-4`}>
-            <Text style={tw`text-indigo-600 text-3xl font-extrabold`}>
+        <TouchableOpacity
+          style={[tw`border rounded-3xl p-6 shadow-sm mb-6 items-center`, { backgroundColor: cardBg, borderColor }]}
+          onPress={() => navigation.navigate('Profile')}
+        >
+          <View style={tw`w-20 h-20 bg-indigo-100 dark:bg-indigo-950 rounded-full justify-center items-center mb-4`}>
+            <Text style={tw`text-indigo-600 dark:text-indigo-400 text-3xl font-extrabold`}>
               {user?.name?.charAt(0)?.toUpperCase() || 'A'}
             </Text>
           </View>
           <Text style={[tw`text-xl font-bold`, { color: textPrimary }]}>{user?.name || 'Offline User'}</Text>
           <Text style={[tw`text-sm mt-1`, { color: textMuted }]}>{user?.email || 'offline@local.app'}</Text>
-        </View>
+          <Text style={tw`text-violet-600 dark:text-violet-400 text-xs font-bold mt-2`}>View & Edit Profile →</Text>
+        </TouchableOpacity>
 
         {/* Settings options list */}
         <View style={[tw`border rounded-3xl overflow-hidden shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
@@ -447,22 +451,20 @@ export default function SettingsScreen() {
           </TouchableOpacity>
 
           {/* PIN Lock settings item */}
-          {!OFFLINE_ONLY && (
-            <View style={[tw`flex-row justify-between items-center px-5 py-3.5 border-b`, { borderColor }]}>
-              <View style={tw`flex-1 mr-3`}>
-                <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>App Passcode Lock</Text>
-                <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>
-                  {appPin ? 'Lock is currently active' : 'Secure your financial records'}
-                </Text>
-              </View>
-              <Switch
-                value={!!appPin}
-                onValueChange={handleTogglePinLock}
-                trackColor={{ false: '#d1d5db', true: '#c7d2fe' }}
-                thumbColor={appPin ? '#4f46e5' : '#f3f4f6'}
-              />
+          <View style={[tw`flex-row justify-between items-center px-5 py-3.5 border-b`, { borderColor }]}>
+            <View style={tw`flex-1 mr-3`}>
+              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>App Passcode Lock</Text>
+              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>
+                {appPin ? 'Lock is currently active' : 'Secure your financial records'}
+              </Text>
             </View>
-          )}
+            <Switch
+              value={!!appPin}
+              onValueChange={handleTogglePinLock}
+              trackColor={{ false: '#d1d5db', true: '#c7d2fe' }}
+              thumbColor={appPin ? '#4f46e5' : '#f3f4f6'}
+            />
+          </View>
 
           {/* Export CSV item */}
           <TouchableOpacity

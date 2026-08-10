@@ -92,7 +92,31 @@ async def list_khata_accounts(current_user: dict = Depends(get_current_user)):
         {"$group": {
             "_id": "$khata_id",
             "total_pending": {"$sum": "$pending_amount"},
-            "total_paid": {"$sum": "$paid_amount"}
+            "total_paid": {"$sum": "$paid_amount"},
+            "total_udhar_diya_pending": {
+                "$sum": {
+                    "$cond": [
+                        {"$or": [
+                            {"$eq": ["$khata_type", "udhar_diya"]},
+                            {"$and": [{"$eq": ["$khata_type", None]}, {"$eq": ["$type", "expense"]}]}
+                        ]},
+                        "$pending_amount",
+                        0
+                    ]
+                }
+            },
+            "total_udhar_liya_pending": {
+                "$sum": {
+                    "$cond": [
+                        {"$or": [
+                            {"$eq": ["$khata_type", "udhar_liya"]},
+                            {"$and": [{"$eq": ["$khata_type", None]}, {"$eq": ["$type", "income"]}]}
+                        ]},
+                        "$pending_amount",
+                        0
+                    ]
+                }
+            }
         }}
     ]
     
@@ -104,12 +128,14 @@ async def list_khata_accounts(current_user: dict = Depends(get_current_user)):
     response_list = []
     for acc in accounts:
         acc_id = str(acc["_id"])
-        stat = stats_map.get(acc_id, {"total_pending": 0, "total_paid": 0})
+        stat = stats_map.get(acc_id, {"total_pending": 0, "total_paid": 0, "total_udhar_diya_pending": 0, "total_udhar_liya_pending": 0})
         
         serialized = serialize_doc(acc)
         serialized["total_pending"] = stat["total_pending"]
         serialized["total_paid"] = stat["total_paid"]
         serialized["outstanding"] = stat["total_pending"]
+        serialized["total_udhar_diya_pending"] = stat.get("total_udhar_diya_pending", 0)
+        serialized["total_udhar_liya_pending"] = stat.get("total_udhar_liya_pending", 0)
         response_list.append(serialized)
         
     return response_list

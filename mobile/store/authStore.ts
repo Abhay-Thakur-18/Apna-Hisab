@@ -185,25 +185,41 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   restoreSession: async () => {
-    set({
-      token: 'offline_token',
-      user: {
-        id: 'offline_user',
-        email: 'offline@local.app',
-        name: 'Offline User',
-        created_at: new Date().toISOString()
-      },
-      appPin: null,
-      isAppLocked: false,
-      isAuthenticated: true,
-      isLoading: false
-    });
+    try {
+      const storedPin = await AsyncStorage.getItem('app_pin');
+      set({
+        token: 'offline_token',
+        user: {
+          id: 'offline_user',
+          email: 'offline@local.app',
+          name: 'Offline User',
+          created_at: new Date().toISOString()
+        },
+        appPin: storedPin,
+        isAppLocked: !!storedPin,
+        isAuthenticated: true,
+        isLoading: false
+      });
+    } catch (e) {
+      set({
+        token: 'offline_token',
+        user: {
+          id: 'offline_user',
+          email: 'offline@local.app',
+          name: 'Offline User',
+          created_at: new Date().toISOString()
+        },
+        appPin: null,
+        isAppLocked: false,
+        isAuthenticated: true,
+        isLoading: false
+      });
+    }
   },
 
   clearError: () => set({ error: null }),
 
   setAppPin: async (pin) => {
-    if (OFFLINE_ONLY) return;
     if (pin) {
       await AsyncStorage.setItem('app_pin', pin);
     } else {
@@ -213,7 +229,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   unlockApp: (pin) => {
-    if (OFFLINE_ONLY) return true;
     const state = useAuthStore.getState();
     if (pin === state.appPin) {
       set({ isAppLocked: false });
@@ -223,7 +238,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   lockApp: () => {
-    if (OFFLINE_ONLY) return;
     const state = useAuthStore.getState();
     if (state.appPin) {
       set({ isAppLocked: true });

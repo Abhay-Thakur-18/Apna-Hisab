@@ -168,7 +168,15 @@ export default function KhataScreen({ navigation }: any) {
     }
   };
 
-  const totalOutstanding = khataAccounts.reduce((sum, acc) => sum + acc.outstanding, 0);
+  const totalUdharDiya = transactions
+    .filter((t) => t.khata_id && t.status !== 'paid' && (t.khata_type === 'udhar_diya' || (!t.khata_type && t.type === 'expense')))
+    .reduce((sum, t) => sum + (t.pending_amount || 0), 0);
+
+  const totalUdharLiya = transactions
+    .filter((t) => t.khata_id && t.status !== 'paid' && (t.khata_type === 'udhar_liya' || (!t.khata_type && t.type === 'income')))
+    .reduce((sum, t) => sum + (t.pending_amount || 0), 0);
+
+  const totalOutstanding = totalUdharDiya + totalUdharLiya;
 
   const bg = isDark ? '#111827' : '#f9fafb';
   const cardBg = isDark ? '#1f2937' : '#ffffff';
@@ -184,20 +192,39 @@ export default function KhataScreen({ navigation }: any) {
       />
 
       {/* Top Ledger stats header */}
-      <View style={[tw`px-6 py-6 border-b`, { backgroundColor: cardBg, borderColor }]}>
-        <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-1`, { color: textMuted }]}>
-          Total Outstanding Khata
-        </Text>
-        <View style={tw`flex-row justify-between items-center`}>
-          <Text style={[tw`text-2xl font-bold`, { color: textPrimary }]}>
-            {formatRupees(totalOutstanding)}
+      <View style={[tw`px-6 py-5 border-b`, { backgroundColor: cardBg, borderColor }]}>
+        <View style={tw`flex-row justify-between items-center mb-3`}>
+          <Text style={[tw`text-xs font-semibold uppercase tracking-wider`, { color: textMuted }]}>
+            Khata Overview
           </Text>
           <TouchableOpacity
-            style={tw`bg-indigo-600 rounded-xl px-4 py-2 shadow-sm`}
+            style={tw`bg-indigo-600 rounded-xl px-3.5 py-1.5 shadow-sm`}
             onPress={() => setShowCreateModal(true)}
           >
             <Text style={tw`text-white text-xs font-bold`}>+ Add Ledger</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={tw`flex-row gap-3`}>
+          <View style={tw`flex-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl p-3.5`}>
+            <Text style={tw`text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300`}>
+              You Will Receive
+            </Text>
+            <Text style={tw`text-lg font-extrabold text-emerald-700 dark:text-emerald-400 mt-0.5`}>
+              {formatRupees(totalUdharDiya)}
+            </Text>
+            <Text style={tw`text-[10px] text-emerald-600 dark:text-emerald-400 font-medium`}>Udhar Diya</Text>
+          </View>
+
+          <View style={tw`flex-1 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-2xl p-3.5`}>
+            <Text style={tw`text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300`}>
+              You Have To Pay
+            </Text>
+            <Text style={tw`text-lg font-extrabold text-amber-700 dark:text-amber-400 mt-0.5`}>
+              {formatRupees(totalUdharLiya)}
+            </Text>
+            <Text style={tw`text-[10px] text-amber-600 dark:text-amber-400 font-medium`}>Udhar Liya</Text>
+          </View>
         </View>
       </View>
 
@@ -210,71 +237,90 @@ export default function KhataScreen({ navigation }: any) {
         {khataAccounts.length === 0 ? (
           <View style={[tw`border border-dashed rounded-2xl p-8 items-center mt-6`, { backgroundColor: cardBg, borderColor }]}>
             <Text style={[tw`text-sm font-semibold`, { color: textMuted }]}>No Khata records created yet</Text>
-            <Text style={[tw`text-xs mt-1 text-center`, { color: textMuted }]}>Tap "+ Add Ledger" to record daily suppliers like Tiffin, Milk, etc.</Text>
+            <Text style={[tw`text-xs mt-1 text-center`, { color: textMuted }]}>Tap "+ Add Ledger" to record daily suppliers or contacts (Tiffin, Friends, Vendor)</Text>
           </View>
         ) : (
-          khataAccounts.map((account) => (
-            <View
-              key={account.id}
-              style={[tw`border rounded-2xl p-5 shadow-sm mb-4`, { backgroundColor: cardBg, borderColor }]}
-            >
-              <View style={tw`flex-row justify-between items-start mb-3`}>
-                <View style={tw`flex-1`}>
-                  <Text style={[tw`text-base font-bold`, { color: textPrimary }]}>{account.name}</Text>
-                  {account.description ? (
-                    <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>{account.description}</Text>
-                  ) : null}
-                </View>
+          khataAccounts.map((account) => {
+            return (
+              <View
+                key={account.id}
+                style={[tw`border rounded-2xl p-5 shadow-sm mb-4`, { backgroundColor: cardBg, borderColor }]}
+              >
+                <View style={tw`flex-row justify-between items-start mb-3`}>
+                  <View style={tw`flex-1`}>
+                    <Text style={[tw`text-base font-bold`, { color: textPrimary }]}>{account.name}</Text>
+                    {account.description ? (
+                      <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>{account.description}</Text>
+                    ) : null}
+                  </View>
 
-                <TouchableOpacity onPress={() => handleDeleteAccount(account.id, account.name)}>
-                  <Text style={tw`text-red-500 text-xs font-semibold`}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Stats grid */}
-              <View style={[tw`flex-row justify-between rounded-xl p-3 mb-4`, { backgroundColor: isDark ? '#111827' : '#f9fafb' }]}>
-                <View style={tw`flex-1`}>
-                  <Text style={[tw`text-[10px] font-semibold uppercase`, { color: textMuted }]}>Outstanding</Text>
-                  <Text style={tw`text-sm font-bold text-amber-500 mt-0.5`}>
-                    {formatRupees(account.outstanding)}
-                  </Text>
-                </View>
-                <View style={[tw`w-px mx-2`, { backgroundColor: isDark ? '#374151' : '#e5e7eb' }]} />
-                <View style={tw`flex-1`}>
-                  <Text style={[tw`text-[10px] font-semibold uppercase`, { color: textMuted }]}>Paid</Text>
-                  <Text style={[tw`text-sm font-bold mt-0.5`, { color: textPrimary }]}>
-                    {formatRupees(account.total_paid)}
-                  </Text>
-                </View>
-                <View style={[tw`w-px mx-2`, { backgroundColor: isDark ? '#374151' : '#e5e7eb' }]} />
-                <View style={tw`flex-1`}>
-                  <Text style={[tw`text-[10px] font-semibold uppercase`, { color: textMuted }]}>Total</Text>
-                  <Text style={[tw`text-sm font-bold mt-0.5`, { color: textPrimary }]}>
-                    {formatRupees(account.outstanding + account.total_paid)}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Action buttons */}
-              <View style={tw`flex-row gap-2`}>
-                <TouchableOpacity
-                  style={[tw`flex-1 border rounded-xl py-2.5 items-center`, { backgroundColor: cardBg, borderColor }]}
-                  onPress={() => navigation.navigate('Transactions', { filterKhataId: account.id })}
-                >
-                  <Text style={[tw`text-xs font-semibold`, { color: textPrimary }]}>View History</Text>
-                </TouchableOpacity>
-
-                {account.outstanding > 0 && (
-                  <TouchableOpacity
-                    style={tw`flex-1 bg-indigo-600 rounded-xl py-2.5 items-center shadow-sm`}
-                    onPress={() => openPaymentFlow(account)}
-                  >
-                    <Text style={tw`text-white text-xs font-bold`}>Record Payment</Text>
+                  <TouchableOpacity onPress={() => handleDeleteAccount(account.id, account.name)}>
+                    <Text style={tw`text-red-500 text-xs font-semibold`}>Delete</Text>
                   </TouchableOpacity>
-                )}
+                </View>
+
+                {/* Udhar Diya vs Udhar Liya stats */}
+                <View style={[tw`flex-row justify-between rounded-xl p-3 mb-4`, { backgroundColor: isDark ? '#111827' : '#f9fafb' }]}>
+                  <View style={tw`flex-1`}>
+                    <Text style={tw`text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400`}>Udhar Diya</Text>
+                    <Text style={tw`text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-0.5`}>
+                      {formatRupees(account.total_udhar_diya_pending || 0)}
+                    </Text>
+                  </View>
+                  <View style={[tw`w-px mx-2`, { backgroundColor: isDark ? '#374151' : '#e5e7eb' }]} />
+                  <View style={tw`flex-1`}>
+                    <Text style={tw`text-[9px] font-bold uppercase text-amber-600 dark:text-amber-400`}>Udhar Liya</Text>
+                    <Text style={tw`text-sm font-bold text-amber-600 dark:text-amber-400 mt-0.5`}>
+                      {formatRupees(account.total_udhar_liya_pending || 0)}
+                    </Text>
+                  </View>
+                  <View style={[tw`w-px mx-2`, { backgroundColor: isDark ? '#374151' : '#e5e7eb' }]} />
+                  <View style={tw`flex-1`}>
+                    <Text style={[tw`text-[9px] font-bold uppercase`, { color: textMuted }]}>Paid</Text>
+                    <Text style={[tw`text-sm font-bold mt-0.5`, { color: textPrimary }]}>
+                      {formatRupees(account.total_paid || 0)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Quick Add Udhar Diya / Liya controls */}
+                <View style={tw`flex-row gap-2 mb-2`}>
+                  <TouchableOpacity
+                    style={tw`flex-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-xl py-2 items-center`}
+                    onPress={() => navigation.navigate('AddTransaction', { khataId: account.id, khataType: 'udhar_diya' })}
+                  >
+                    <Text style={tw`text-emerald-700 dark:text-emerald-300 text-xs font-bold`}>+ Udhar Diya</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={tw`flex-1 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl py-2 items-center`}
+                    onPress={() => navigation.navigate('AddTransaction', { khataId: account.id, khataType: 'udhar_liya' })}
+                  >
+                    <Text style={tw`text-amber-700 dark:text-amber-300 text-xs font-bold`}>+ Udhar Liya</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Action buttons */}
+                <View style={tw`flex-row gap-2`}>
+                  <TouchableOpacity
+                    style={[tw`flex-1 border rounded-xl py-2 items-center`, { backgroundColor: cardBg, borderColor }]}
+                    onPress={() => navigation.navigate('Transactions', { filterKhataId: account.id })}
+                  >
+                    <Text style={[tw`text-xs font-semibold`, { color: textPrimary }]}>View History</Text>
+                  </TouchableOpacity>
+
+                  {account.outstanding > 0 && (
+                    <TouchableOpacity
+                      style={tw`flex-1 bg-indigo-600 rounded-xl py-2 items-center shadow-sm`}
+                      onPress={() => openPaymentFlow(account)}
+                    >
+                      <Text style={tw`text-white text-xs font-bold`}>Record Payment</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
 
