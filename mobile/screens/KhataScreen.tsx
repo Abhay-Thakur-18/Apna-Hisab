@@ -14,7 +14,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { useTransactionStore } from '../store/transactionStore';
+import { useIsDark } from '../store/themeStore';
 import { formatRupees } from '../utils/money';
+import { formatDateTime } from '../utils/date';
 
 export default function KhataScreen({ navigation }: any) {
   const {
@@ -28,6 +30,7 @@ export default function KhataScreen({ navigation }: any) {
     isLoading,
   } = useTransactionStore();
 
+  const isDark = useIsDark();
   const [refreshing, setRefreshing] = useState(false);
   
   // Create Account State
@@ -167,17 +170,26 @@ export default function KhataScreen({ navigation }: any) {
 
   const totalOutstanding = khataAccounts.reduce((sum, acc) => sum + acc.outstanding, 0);
 
+  const bg = isDark ? '#111827' : '#f9fafb';
+  const cardBg = isDark ? '#1f2937' : '#ffffff';
+  const borderColor = isDark ? '#374151' : '#f3f4f6';
+  const textPrimary = isDark ? '#f9fafb' : '#1f2937';
+  const textMuted = isDark ? '#6b7280' : '#9ca3af';
+
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
-      
+    <SafeAreaView style={[tw`flex-1`, { backgroundColor: bg }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? '#111827' : '#f9fafb'}
+      />
+
       {/* Top Ledger stats header */}
-      <View style={tw`bg-white px-6 py-6 border-b border-gray-150`}>
-        <Text style={tw`text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1`}>
+      <View style={[tw`px-6 py-6 border-b`, { backgroundColor: cardBg, borderColor }]}>
+        <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-1`, { color: textMuted }]}>
           Total Outstanding Khata
         </Text>
         <View style={tw`flex-row justify-between items-center`}>
-          <Text style={tw`text-2xl font-bold text-gray-800`}>
+          <Text style={[tw`text-2xl font-bold`, { color: textPrimary }]}>
             {formatRupees(totalOutstanding)}
           </Text>
           <TouchableOpacity
@@ -196,48 +208,48 @@ export default function KhataScreen({ navigation }: any) {
         }
       >
         {khataAccounts.length === 0 ? (
-          <View style={tw`bg-white border border-gray-100 rounded-2xl p-8 items-center border-dashed mt-6`}>
-            <Text style={tw`text-gray-400 text-sm font-semibold`}>No Khata records created yet</Text>
-            <Text style={tw`text-gray-400 text-xs mt-1`}>Tap "+ Add Ledger" to record daily suppliers like Tiffin, Milk, etc.</Text>
+          <View style={[tw`border border-dashed rounded-2xl p-8 items-center mt-6`, { backgroundColor: cardBg, borderColor }]}>
+            <Text style={[tw`text-sm font-semibold`, { color: textMuted }]}>No Khata records created yet</Text>
+            <Text style={[tw`text-xs mt-1 text-center`, { color: textMuted }]}>Tap "+ Add Ledger" to record daily suppliers like Tiffin, Milk, etc.</Text>
           </View>
         ) : (
           khataAccounts.map((account) => (
-            <View 
-              key={account.id} 
-              style={tw`bg-white border border-gray-100 rounded-2xl p-5 shadow-sm mb-4`}
+            <View
+              key={account.id}
+              style={[tw`border rounded-2xl p-5 shadow-sm mb-4`, { backgroundColor: cardBg, borderColor }]}
             >
               <View style={tw`flex-row justify-between items-start mb-3`}>
                 <View style={tw`flex-1`}>
-                  <Text style={tw`text-base font-bold text-gray-800`}>{account.name}</Text>
+                  <Text style={[tw`text-base font-bold`, { color: textPrimary }]}>{account.name}</Text>
                   {account.description ? (
-                    <Text style={tw`text-xs text-gray-400 mt-0.5`}>{account.description}</Text>
+                    <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>{account.description}</Text>
                   ) : null}
                 </View>
-                
+
                 <TouchableOpacity onPress={() => handleDeleteAccount(account.id, account.name)}>
                   <Text style={tw`text-red-500 text-xs font-semibold`}>Delete</Text>
                 </TouchableOpacity>
               </View>
 
               {/* Stats grid */}
-              <View style={tw`flex-row justify-between bg-gray-50 rounded-xl p-3 mb-4`}>
+              <View style={[tw`flex-row justify-between rounded-xl p-3 mb-4`, { backgroundColor: isDark ? '#111827' : '#f9fafb' }]}>
                 <View style={tw`flex-1`}>
-                  <Text style={tw`text-[10px] font-semibold text-gray-400 uppercase`}>Outstanding</Text>
-                  <Text style={tw`text-sm font-bold text-amber-600 mt-0.5`}>
+                  <Text style={[tw`text-[10px] font-semibold uppercase`, { color: textMuted }]}>Outstanding</Text>
+                  <Text style={tw`text-sm font-bold text-amber-500 mt-0.5`}>
                     {formatRupees(account.outstanding)}
                   </Text>
                 </View>
-                <View style={tw`w-px bg-gray-200 mx-2`} />
+                <View style={[tw`w-px mx-2`, { backgroundColor: isDark ? '#374151' : '#e5e7eb' }]} />
                 <View style={tw`flex-1`}>
-                  <Text style={tw`text-[10px] font-semibold text-gray-400 uppercase`}>Paid</Text>
-                  <Text style={tw`text-sm font-bold text-gray-700 mt-0.5`}>
+                  <Text style={[tw`text-[10px] font-semibold uppercase`, { color: textMuted }]}>Paid</Text>
+                  <Text style={[tw`text-sm font-bold mt-0.5`, { color: textPrimary }]}>
                     {formatRupees(account.total_paid)}
                   </Text>
                 </View>
-                <View style={tw`w-px bg-gray-200 mx-2`} />
+                <View style={[tw`w-px mx-2`, { backgroundColor: isDark ? '#374151' : '#e5e7eb' }]} />
                 <View style={tw`flex-1`}>
-                  <Text style={tw`text-[10px] font-semibold text-gray-400 uppercase`}>Total</Text>
-                  <Text style={tw`text-sm font-bold text-gray-600 mt-0.5`}>
+                  <Text style={[tw`text-[10px] font-semibold uppercase`, { color: textMuted }]}>Total</Text>
+                  <Text style={[tw`text-sm font-bold mt-0.5`, { color: textPrimary }]}>
                     {formatRupees(account.outstanding + account.total_paid)}
                   </Text>
                 </View>
@@ -245,15 +257,15 @@ export default function KhataScreen({ navigation }: any) {
 
               {/* Action buttons */}
               <View style={tw`flex-row gap-2`}>
-                <TouchableOpacity 
-                  style={tw`flex-1 bg-white border border-gray-200 rounded-xl py-2.5 items-center`}
+                <TouchableOpacity
+                  style={[tw`flex-1 border rounded-xl py-2.5 items-center`, { backgroundColor: cardBg, borderColor }]}
                   onPress={() => navigation.navigate('Transactions', { filterKhataId: account.id })}
                 >
-                  <Text style={tw`text-gray-700 text-xs font-semibold`}>View History</Text>
+                  <Text style={[tw`text-xs font-semibold`, { color: textPrimary }]}>View History</Text>
                 </TouchableOpacity>
-                
+
                 {account.outstanding > 0 && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={tw`flex-1 bg-indigo-600 rounded-xl py-2.5 items-center shadow-sm`}
                     onPress={() => openPaymentFlow(account)}
                   >
@@ -274,29 +286,32 @@ export default function KhataScreen({ navigation }: any) {
         onRequestClose={() => setShowCreateModal(false)}
       >
         <View style={tw`flex-1 justify-center items-center bg-black/40 px-6`}>
-          <View style={tw`bg-white rounded-2xl p-6 w-full max-w-sm`}>
-            <Text style={tw`text-lg font-bold text-gray-800 mb-4`}>Add Khata Ledger</Text>
-            
+          <View style={[tw`rounded-2xl p-6 w-full max-w-sm`, { backgroundColor: cardBg }]}>
+            <Text style={[tw`text-lg font-bold mb-4`, { color: textPrimary }]}>Add Khata Ledger</Text>
+
             <TextInput
-              style={tw`bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm mb-3`}
+              style={[tw`border rounded-xl px-4 py-3 text-sm mb-3`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
               placeholder="e.g. Milk Vendor, Daily Tiffin"
+              placeholderTextColor={textMuted}
               value={newName}
               onChangeText={setNewName}
+              autoFocus
             />
-            
+
             <TextInput
-              style={tw`bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm mb-4`}
+              style={[tw`border rounded-xl px-4 py-3 text-sm mb-4`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
               placeholder="Description (Optional)"
+              placeholderTextColor={textMuted}
               value={newDesc}
               onChangeText={setNewDesc}
             />
 
             <View style={tw`flex-row gap-3`}>
               <TouchableOpacity
-                style={tw`flex-1 border border-gray-200 rounded-xl py-3 items-center`}
+                style={[tw`flex-1 border rounded-xl py-3 items-center`, { borderColor }]}
                 onPress={() => setShowCreateModal(false)}
               >
-                <Text style={tw`text-gray-600 font-semibold text-sm`}>Cancel</Text>
+                <Text style={[tw`font-semibold text-sm`, { color: textPrimary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={tw`flex-1 bg-indigo-600 rounded-xl py-3 items-center`}
@@ -318,13 +333,13 @@ export default function KhataScreen({ navigation }: any) {
           onRequestClose={() => setShowPaymentModal(false)}
         >
           <View style={tw`flex-1 justify-end bg-black/50`}>
-            <View style={tw`bg-white rounded-t-3xl p-6`}>
+            <View style={[tw`rounded-t-3xl p-6`, { backgroundColor: cardBg }]}>
               <View style={tw`flex-row justify-between items-center mb-5`}>
-                <Text style={tw`text-lg font-bold text-gray-800`}>
-                  Pay Outstanding → {activeAccount.name}
+                <Text style={[tw`text-lg font-bold`, { color: textPrimary }]}>
+                  Pay → {activeAccount.name}
                 </Text>
                 <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
-                  <Text style={tw`text-gray-500 font-bold text-sm`}>Close</Text>
+                  <Text style={[tw`font-bold text-sm`, { color: textMuted }]}>Close</Text>
                 </TouchableOpacity>
               </View>
 
@@ -344,10 +359,10 @@ export default function KhataScreen({ navigation }: any) {
                       }`}
                       onPress={() => setSelectedTxId(tx.id)}
                     >
-                      <Text style={tw`text-xs font-semibold text-gray-500`}>
-                        {tx.date} • {tx.subcategory}
+                      <Text style={[tw`text-xs font-semibold`, { color: textMuted }]}>
+                        {formatDateTime(tx.date)} • {tx.subcategory}
                       </Text>
-                      <Text style={tw`text-sm font-bold text-gray-800 mt-1`}>
+                      <Text style={[tw`text-sm font-bold mt-1`, { color: textPrimary }]}>
                         Outstanding: {formatRupees(tx.pending_amount)}
                       </Text>
                     </TouchableOpacity>
@@ -361,8 +376,9 @@ export default function KhataScreen({ navigation }: any) {
                   Payment Amount (Rupees)
                 </Text>
                 <TextInput
-                  style={tw`bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 font-bold`}
+                  style={[tw`border rounded-xl px-4 py-3 text-sm font-bold`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
                   placeholder="0.00"
+                  placeholderTextColor={textMuted}
                   keyboardType="numeric"
                   value={payAmountStr}
                   onChangeText={setPayAmountStr}
@@ -401,8 +417,9 @@ export default function KhataScreen({ navigation }: any) {
                   Notes (Optional)
                 </Text>
                 <TextInput
-                  style={tw`bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800`}
+                  style={[tw`border rounded-xl px-4 py-3 text-sm`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
                   placeholder="e.g. Paid via PhonePe"
+                  placeholderTextColor={textMuted}
                   value={payDesc}
                   onChangeText={setPayDesc}
                 />

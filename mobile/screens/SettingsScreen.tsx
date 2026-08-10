@@ -15,10 +15,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { useAuthStore } from '../store/authStore';
 import { useTransactionStore } from '../store/transactionStore';
-import { API_URL, apiRequest } from '../services/api';
+import { useThemeStore, useIsDark } from '../store/themeStore';
+import { API_URL, apiRequest, OFFLINE_ONLY } from '../services/api';
 import { formatRupees, rupeesToPaise } from '../utils/money';
 import { DEFAULT_EXPENSE_CATEGORIES } from '../utils/categories';
-import { documentDirectory, downloadAsync, readAsStringAsync } from 'expo-file-system/legacy';
+import { documentDirectory, downloadAsync, readAsStringAsync, writeAsStringAsync } from 'expo-file-system/legacy';
 import { shareAsync } from 'expo-sharing';
 import { getDocumentAsync } from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,6 +27,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function SettingsScreen() {
   const { user, logout, appPin, setAppPin } = useAuthStore();
   const { khataAccounts, fetchKhataAccounts } = useTransactionStore();
+  const { theme, setTheme } = useThemeStore();
+  const isDark = useIsDark();
 
   const [showPinSetupModal, setShowPinSetupModal] = useState(false);
   const [pinSetupMode, setPinSetupMode] = useState<'enable' | 'disable'>('enable');
@@ -141,8 +144,8 @@ export default function SettingsScreen() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'DELETE ACCOUNT PERMANENTLY',
-      'This will delete your account and cascades to clear ALL your transactions, payments, categories and templates from our database. This action is IRREVERSIBLE. Are you absolutely sure?',
+      'DELETE EVERYTHING PERMANENTLY',
+      'This will clear ALL your transaction history, khata ledger, and settings. This action is IRREVERSIBLE. Are you absolutely sure?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -150,6 +153,21 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              if (OFFLINE_ONLY) {
+                await AsyncStorage.removeItem('offline_transactions');
+                await AsyncStorage.removeItem('offline_khata_accounts');
+                await AsyncStorage.removeItem('offline_recurring_templates');
+                await AsyncStorage.removeItem('last_expense_cat');
+                await AsyncStorage.removeItem('last_expense_sub');
+                await AsyncStorage.removeItem('last_payment_method');
+                await AsyncStorage.removeItem('last_income_cat');
+                await AsyncStorage.removeItem('app_pin');
+                const store = useTransactionStore.getState();
+                await store.fetchTransactions();
+                await store.fetchKhataAccounts();
+                Alert.alert('Data Wiped', 'All local database entries have been deleted.');
+                return;
+              }
               await apiRequest('/api/auth/delete-account', { method: 'POST' });
               logout(); // Wipes local store session details
               Alert.alert('Account Deleted', 'Your data has been wiped.');
@@ -164,10 +182,52 @@ export default function SettingsScreen() {
 
   const handleExportCSV = async () => {
     try {
+      const fileUri = `${documentDirectory}apna_hisab_statement.csv`;
+
+      if (OFFLINE_ONLY) {
+        const txStr = await AsyncStorage.getItem('offline_transactions');
+        const transactions = txStr ? JSON.parse(txStr) : [];
+        
+        transactions.sort((a: any, b: any) => {
+          if (a.date !== b.date) return b.date.localeCompare(a.date);
+          return b.time.localeCompare(a.time);
+        });
+
+        const headers = [
+          "Date", "Time", "Type", "Category", "Subcategory", 
+          "Amount (INR)", "Paid Amount (INR)", "Pending Amount (INR)", 
+          "Status", "Payment Method", "Description"
+        ];
+        const rows = transactions.map((tx: any) => [
+          tx.date,
+          tx.time,
+          tx.type.toUpperCase(),
+          tx.category,
+          tx.subcategory,
+          (tx.amount / 100).toFixed(2),
+          ((tx.paid_amount || tx.amount) / 100).toFixed(2),
+          ((tx.pending_amount || 0) / 100).toFixed(2),
+          (tx.status || 'paid').toUpperCase(),
+          tx.payment_method,
+          tx.description || ''
+        ]);
+
+        const csvContent = [
+          headers.join(','),
+          ...rows.map((row: any[]) => row.map((val: any) => {
+            const s = String(val).replace(/"/g, '""');
+            return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
+          }).join(','))
+        ].join('\n');
+
+        await writeAsStringAsync(fileUri, csvContent);
+        await shareAsync(fileUri);
+        return;
+      }
+
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
       
-      const fileUri = `${documentDirectory}apna_hisab_statement.csv`;
       const downloadRes = await downloadAsync(
         `${API_URL}/api/backup/export/csv`,
         fileUri,
@@ -190,10 +250,36 @@ export default function SettingsScreen() {
 
   const handleExportJSON = async () => {
     try {
+      const fileUri = `${documentDirectory}apna_hisab_backup.json`;
+
+      if (OFFLINE_ONLY) {
+        const txStr = await AsyncStorage.getItem('offline_transactions');
+        const transactions = txStr ? JSON.parse(txStr) : [];
+        
+        const khStr = await AsyncStorage.getItem('offline_khata_accounts');
+        const khata_accounts = khStr ? JSON.parse(khStr) : [];
+
+        const recStr = await AsyncStorage.getItem('offline_recurring_templates');
+        const recurring_templates = recStr ? JSON.parse(recStr) : [];
+
+        const backupData = {
+          export_date: new Date().toISOString(),
+          user_email: 'offline@local.app',
+          transactions,
+          khata_accounts,
+          recurring_templates,
+          payments: [],
+          categories: []
+        };
+
+        await writeAsStringAsync(fileUri, JSON.stringify(backupData, null, 2));
+        await shareAsync(fileUri);
+        return;
+      }
+
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
       
-      const fileUri = `${documentDirectory}apna_hisab_backup.json`;
       const downloadRes = await downloadAsync(
         `${API_URL}/api/backup/export/json`,
         fileUri,
@@ -241,6 +327,19 @@ export default function SettingsScreen() {
             text: 'Restore',
             onPress: async () => {
               try {
+                if (OFFLINE_ONLY) {
+                  await AsyncStorage.setItem('offline_transactions', JSON.stringify(backupData.transactions));
+                  await AsyncStorage.setItem('offline_khata_accounts', JSON.stringify(backupData.khata_accounts));
+                  if (backupData.recurring_templates) {
+                    await AsyncStorage.setItem('offline_recurring_templates', JSON.stringify(backupData.recurring_templates));
+                  }
+                  Alert.alert('Success', 'Backup restored successfully.');
+                  const store = useTransactionStore.getState();
+                  await store.fetchTransactions();
+                  await store.fetchKhataAccounts();
+                  return;
+                }
+
                 const token = await AsyncStorage.getItem('token');
                 const response = await fetch(`${API_URL}/api/backup/import/json`, {
                   method: 'POST',
@@ -308,92 +407,136 @@ export default function SettingsScreen() {
     (c) => c.name === category
   )?.subcategories || ['General'];
 
+  const bg = isDark ? '#111827' : '#f9fafb';
+  const cardBg = isDark ? '#1f2937' : '#ffffff';
+  const borderColor = isDark ? '#374151' : '#f3f4f6';
+  const textPrimary = isDark ? '#f9fafb' : '#1f2937';
+  const textMuted = isDark ? '#6b7280' : '#9ca3af';
+
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
+    <SafeAreaView style={[tw`flex-1`, { backgroundColor: bg }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? '#111827' : '#f9fafb'}
+      />
       
       <ScrollView contentContainerStyle={tw`p-6 pb-24`}>
         {/* User Card */}
-        <View style={tw`bg-white border border-gray-100 rounded-3xl p-6 shadow-sm mb-6 items-center`}>
+        <View style={[tw`border rounded-3xl p-6 shadow-sm mb-6 items-center`, { backgroundColor: cardBg, borderColor }]}>
           <View style={tw`w-20 h-20 bg-indigo-100 rounded-full justify-center items-center mb-4`}>
             <Text style={tw`text-indigo-600 text-3xl font-extrabold`}>
-              {user?.name.charAt(0).toUpperCase()}
+              {user?.name?.charAt(0)?.toUpperCase() || 'A'}
             </Text>
           </View>
-          <Text style={tw`text-xl font-bold text-gray-800`}>{user?.name}</Text>
-          <Text style={tw`text-sm text-gray-400 mt-1`}>{user?.email}</Text>
+          <Text style={[tw`text-xl font-bold`, { color: textPrimary }]}>{user?.name || 'Offline User'}</Text>
+          <Text style={[tw`text-sm mt-1`, { color: textMuted }]}>{user?.email || 'offline@local.app'}</Text>
         </View>
 
         {/* Settings options list */}
-        <View style={tw`bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm mb-6`}>
+        <View style={[tw`border rounded-3xl overflow-hidden shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
           {/* Recurring transactions item */}
-          <TouchableOpacity 
-            style={tw`flex-row justify-between items-center px-5 py-4 border-b border-gray-100`}
+          <TouchableOpacity
+            style={[tw`flex-row justify-between items-center px-5 py-4 border-b`, { borderColor }]}
             onPress={openRecurringManager}
           >
             <View>
-              <Text style={tw`text-sm font-bold text-gray-800`}>Recurring Transactions</Text>
-              <Text style={tw`text-xs text-gray-400 mt-0.5`}>Manage daily, weekly or monthly repeats</Text>
+              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Recurring Transactions</Text>
+              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Manage daily, weekly or monthly repeats</Text>
             </View>
-            <Text style={tw`text-gray-400 font-bold`}>&gt;</Text>
+            <Text style={{ color: textMuted, fontWeight: 'bold' }}>›</Text>
           </TouchableOpacity>
 
           {/* PIN Lock settings item */}
-          <View style={tw`flex-row justify-between items-center px-5 py-3.5 border-b border-gray-100`}>
-            <View style={tw`flex-1 mr-3`}>
-              <Text style={tw`text-sm font-bold text-gray-800`}>App Passcode Lock</Text>
-              <Text style={tw`text-xs text-gray-400 mt-0.5`}>
-                {appPin ? 'Lock is currently active' : 'Secure your financial records'}
-              </Text>
+          {!OFFLINE_ONLY && (
+            <View style={[tw`flex-row justify-between items-center px-5 py-3.5 border-b`, { borderColor }]}>
+              <View style={tw`flex-1 mr-3`}>
+                <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>App Passcode Lock</Text>
+                <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>
+                  {appPin ? 'Lock is currently active' : 'Secure your financial records'}
+                </Text>
+              </View>
+              <Switch
+                value={!!appPin}
+                onValueChange={handleTogglePinLock}
+                trackColor={{ false: '#d1d5db', true: '#c7d2fe' }}
+                thumbColor={appPin ? '#4f46e5' : '#f3f4f6'}
+              />
             </View>
-            <Switch
-              value={!!appPin}
-              onValueChange={handleTogglePinLock}
-              trackColor={{ false: '#d1d5db', true: '#c7d2fe' }}
-              thumbColor={appPin ? '#4f46e5' : '#f3f4f6'}
-            />
-          </View>
+          )}
 
           {/* Export CSV item */}
-          <TouchableOpacity 
-            style={tw`flex-row justify-between items-center px-5 py-4 border-b border-gray-100`}
+          <TouchableOpacity
+            style={[tw`flex-row justify-between items-center px-5 py-4 border-b`, { borderColor }]}
             onPress={handleExportCSV}
           >
             <View>
-              <Text style={tw`text-sm font-bold text-gray-800`}>Export CSV Statement</Text>
-              <Text style={tw`text-xs text-gray-400 mt-0.5`}>Download financial ledger for Excel/Sheets</Text>
+              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Export CSV Statement</Text>
+              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Download financial ledger for Excel/Sheets</Text>
             </View>
-            <Text style={tw`text-gray-400 font-bold`}>&gt;</Text>
+            <Text style={{ color: textMuted, fontWeight: 'bold' }}>›</Text>
           </TouchableOpacity>
 
           {/* Export JSON item */}
-          <TouchableOpacity 
-            style={tw`flex-row justify-between items-center px-5 py-4 border-b border-gray-100`}
+          <TouchableOpacity
+            style={[tw`flex-row justify-between items-center px-5 py-4 border-b`, { borderColor }]}
             onPress={handleExportJSON}
           >
             <View>
-              <Text style={tw`text-sm font-bold text-gray-800`}>Backup Data (JSON)</Text>
-              <Text style={tw`text-xs text-gray-400 mt-0.5`}>Export a backup file of your account records</Text>
+              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Backup Data (JSON)</Text>
+              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Export a backup file of your account records</Text>
             </View>
-            <Text style={tw`text-gray-400 font-bold`}>&gt;</Text>
+            <Text style={{ color: textMuted, fontWeight: 'bold' }}>›</Text>
           </TouchableOpacity>
 
           {/* Import JSON item */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={tw`flex-row justify-between items-center px-5 py-4`}
             onPress={handleImportJSON}
           >
             <View>
-              <Text style={tw`text-sm font-bold text-gray-800`}>Restore Data (JSON)</Text>
-              <Text style={tw`text-xs text-gray-400 mt-0.5`}>Import previous data backup to your account</Text>
+              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Restore Data (JSON)</Text>
+              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Import previous data backup to your account</Text>
             </View>
-            <Text style={tw`text-gray-400 font-bold`}>&gt;</Text>
+            <Text style={{ color: textMuted, fontWeight: 'bold' }}>›</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Theme Selector Card */}
+        <View style={[tw`border rounded-3xl p-5 shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
+          <Text style={[tw`text-sm font-bold mb-4`, { color: textPrimary }]}>Appearance Theme</Text>
+          <View style={tw`flex-row gap-3`}>
+            {(['light', 'system', 'dark'] as const).map((t) => (
+              <TouchableOpacity
+                key={t}
+                style={[
+                  tw`flex-1 py-3 rounded-xl items-center border-2`,
+                  theme === t
+                    ? { borderColor: '#4f46e5', backgroundColor: isDark ? '#1e1b4b' : '#eef2ff' }
+                    : { borderColor: borderColor, backgroundColor: isDark ? '#374151' : '#f9fafb' },
+                ]}
+                onPress={() => setTheme(t)}
+              >
+                <Text style={{ fontSize: 18, marginBottom: 2 }}>
+                  {t === 'light' ? '☀️' : t === 'dark' ? '🌙' : '⚙️'}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 'bold',
+                    textTransform: 'capitalize',
+                    color: theme === t ? '#4f46e5' : textMuted,
+                  }}
+                >
+                  {t}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* Danger zone card */}
-        <View style={tw`bg-white border border-gray-100 rounded-3xl p-5 shadow-sm mb-6`}>
-          <Text style={tw`text-sm font-bold text-gray-800 mb-4`}>Danger Zone</Text>
+        <View style={[tw`border rounded-3xl p-5 shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
+          <Text style={[tw`text-sm font-bold mb-4`, { color: textPrimary }]}>Danger Zone</Text>
           
           <TouchableOpacity 
             style={tw`bg-red-50 border border-red-200 rounded-xl py-3 items-center`}
@@ -404,12 +547,14 @@ export default function SettingsScreen() {
         </View>
 
         {/* Logout */}
-        <TouchableOpacity 
-          style={tw`bg-gray-200 rounded-xl py-3.5 items-center justify-center mb-8`}
-          onPress={logout}
-        >
-          <Text style={tw`text-gray-700 font-bold text-base`}>Log Out</Text>
-        </TouchableOpacity>
+        {!OFFLINE_ONLY && (
+          <TouchableOpacity 
+            style={tw`bg-gray-200 rounded-xl py-3.5 items-center justify-center mb-8`}
+            onPress={logout}
+          >
+            <Text style={tw`text-gray-700 font-bold text-base`}>Log Out</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* RECURRING TRANSACTIONS MODAL */}

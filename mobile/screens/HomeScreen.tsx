@@ -14,8 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { useAuthStore } from '../store/authStore';
 import { useTransactionStore } from '../store/transactionStore';
+import { useIsDark } from '../store/themeStore';
 import { apiRequest } from '../services/api';
 import { formatRupees } from '../utils/money';
+import { formatDateTime } from '../utils/date';
 
 export default function HomeScreen({ navigation }: any) {
   const { user } = useAuthStore();
@@ -27,6 +29,8 @@ export default function HomeScreen({ navigation }: any) {
     isLoading,
   } = useTransactionStore();
 
+  const isDark = useIsDark();
+
   const [refreshing, setRefreshing] = useState(false);
   const [dueRecurring, setDueRecurring] = useState<any[]>([]);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
@@ -36,7 +40,7 @@ export default function HomeScreen({ navigation }: any) {
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpense, setTotalExpense] = useState(0);
   const [totalPending, setTotalPending] = useState(0);
-  
+
   const [todayExpense, setTodayExpense] = useState(0);
   const [weekExpense, setWeekExpense] = useState(0);
 
@@ -111,16 +115,17 @@ export default function HomeScreen({ navigation }: any) {
         method: 'POST',
         body: JSON.stringify(instance),
       });
-      
-      // Update list
-      setDueRecurring((prev) => 
-        prev.filter((item) => !(item.recurring_id === instance.recurring_id && item.date === instance.date))
+
+      setDueRecurring((prev) =>
+        prev.filter(
+          (item) =>
+            !(item.recurring_id === instance.recurring_id && item.date === instance.date)
+        )
       );
-      
-      // Refresh transactions and balances
+
       await fetchTransactions();
       await fetchKhataAccounts();
-      
+
       Alert.alert('Approved', `${instance.category} entry generated.`);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to approve entry.');
@@ -143,23 +148,37 @@ export default function HomeScreen({ navigation }: any) {
   const remainingBalance = totalIncome - totalExpense;
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f3f4f6" />
-      
+    <SafeAreaView style={[tw`flex-1`, { backgroundColor: isDark ? '#111827' : '#f9fafb' }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? '#111827' : '#f3f4f6'}
+      />
+
       {/* Top Welcome Bar */}
-      <View style={tw`px-6 py-4 flex-row justify-between items-center bg-white border-b border-gray-100`}>
+      <View
+        style={[
+          tw`px-6 py-4 flex-row justify-between items-center border-b`,
+          { backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#374151' : '#f3f4f6' },
+        ]}
+      >
         <View>
-          <Text style={tw`text-xs font-semibold text-gray-400 uppercase tracking-wider`}>
+          <Text style={[tw`text-xs font-semibold uppercase tracking-wider`, { color: isDark ? '#9ca3af' : '#9ca3af' }]}>
             {getGreeting()}
           </Text>
-          <Text style={tw`text-xl font-bold text-gray-800`}>
-            Namaste, {user?.name.split(' ')[0]}
+          <Text style={[tw`text-xl font-bold`, { color: isDark ? '#f9fafb' : '#1f2937' }]}>
+            Namaste, {user?.name?.split(' ')[0] || 'Friend'}
           </Text>
         </View>
-        
-        {/* Banner with Active Period */}
-        <View style={tw`bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-1.5`}>
-          <Text style={tw`text-xs font-bold text-indigo-700`}>{getMonthName()}</Text>
+
+        <View
+          style={[
+            tw`border rounded-xl px-3 py-1.5`,
+            { backgroundColor: isDark ? '#312e81' : '#eef2ff', borderColor: isDark ? '#4338ca' : '#c7d2fe' },
+          ]}
+        >
+          <Text style={[tw`text-xs font-bold`, { color: isDark ? '#a5b4fc' : '#4338ca' }]}>
+            {getMonthName()}
+          </Text>
         </View>
       </View>
 
@@ -171,7 +190,7 @@ export default function HomeScreen({ navigation }: any) {
       >
         {/* Due Recurring Notifications Banner */}
         {dueRecurring.length > 0 && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={tw`bg-indigo-100 border border-indigo-200 rounded-2xl p-4 flex-row justify-between items-center shadow-sm mb-6`}
             onPress={() => setShowRecurringModal(true)}
           >
@@ -189,7 +208,7 @@ export default function HomeScreen({ navigation }: any) {
           </TouchableOpacity>
         )}
 
-        {/* Main Dashboard Balance Cards */}
+        {/* Main Dashboard Balance Card */}
         <View style={tw`bg-indigo-600 rounded-3xl p-6 shadow-md mb-6`}>
           <Text style={tw`text-indigo-200 text-xs font-semibold uppercase tracking-wider mb-1`}>
             Remaining Balance
@@ -197,9 +216,9 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={tw`text-white text-3xl font-bold`}>
             {formatRupees(remainingBalance)}
           </Text>
-          
+
           <View style={tw`h-px bg-indigo-500 my-4`} />
-          
+
           <View style={tw`flex-row justify-between`}>
             <View style={tw`flex-1`}>
               <Text style={tw`text-indigo-200 text-xs font-medium mb-0.5`}>Income</Text>
@@ -215,7 +234,7 @@ export default function HomeScreen({ navigation }: any) {
 
         {/* Khata Ledger Summary Card */}
         {totalPending > 0 && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={tw`bg-amber-500 rounded-2xl p-4 flex-row justify-between items-center shadow-sm mb-6`}
             onPress={() => navigation.navigate('Khata')}
           >
@@ -233,50 +252,79 @@ export default function HomeScreen({ navigation }: any) {
 
         {/* Quick Period Indicators */}
         <View style={tw`flex-row gap-4 mb-6`}>
-          <View style={tw`flex-1 bg-white border border-gray-100 rounded-2xl p-4 shadow-sm`}>
-            <Text style={tw`text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1`}>
+          <View
+            style={[
+              tw`flex-1 border rounded-2xl p-4 shadow-sm`,
+              { backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#374151' : '#f3f4f6' },
+            ]}
+          >
+            <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-1`, { color: isDark ? '#6b7280' : '#9ca3af' }]}>
               Today
             </Text>
-            <Text style={tw`text-gray-800 text-lg font-bold`}>
+            <Text style={[tw`text-lg font-bold`, { color: isDark ? '#f9fafb' : '#1f2937' }]}>
               {formatRupees(todayExpense)}
             </Text>
           </View>
-          <View style={tw`flex-1 bg-white border border-gray-100 rounded-2xl p-4 shadow-sm`}>
-            <Text style={tw`text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1`}>
+          <View
+            style={[
+              tw`flex-1 border rounded-2xl p-4 shadow-sm`,
+              { backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#374151' : '#f3f4f6' },
+            ]}
+          >
+            <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-1`, { color: isDark ? '#6b7280' : '#9ca3af' }]}>
               This Week
             </Text>
-            <Text style={tw`text-gray-800 text-lg font-bold`}>
+            <Text style={[tw`text-lg font-bold`, { color: isDark ? '#f9fafb' : '#1f2937' }]}>
               {formatRupees(weekExpense)}
             </Text>
           </View>
         </View>
 
-        {/* Recent Transactions List Header */}
+        {/* Recent Transactions */}
         <View style={tw`flex-row justify-between items-center mb-4`}>
-          <Text style={tw`text-base font-bold text-gray-800`}>Recent Transactions</Text>
+          <Text style={[tw`text-base font-bold`, { color: isDark ? '#f9fafb' : '#1f2937' }]}>
+            Recent Transactions
+          </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Transactions')}>
-            <Text style={tw`text-indigo-600 text-sm font-semibold`}>See All</Text>
+            <Text style={tw`text-indigo-500 text-sm font-semibold`}>See All</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Recent Transactions Items */}
         {transactions.length === 0 ? (
-          <View style={tw`bg-white border border-gray-100 rounded-2xl p-8 items-center border-dashed`}>
-            <Text style={tw`text-gray-400 text-sm font-semibold`}>No transactions recorded yet</Text>
-            <Text style={tw`text-gray-400 text-xs mt-1`}>Tap the "+" button below to get started</Text>
+          <View
+            style={[
+              tw`border border-dashed rounded-2xl p-8 items-center`,
+              { backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#374151' : '#e5e7eb' },
+            ]}
+          >
+            <Text style={[tw`text-sm font-semibold`, { color: isDark ? '#6b7280' : '#9ca3af' }]}>
+              No transactions recorded yet
+            </Text>
+            <Text style={{ color: isDark ? '#4b5563' : '#9ca3af', fontSize: 12, marginTop: 4 }}>
+              Tap the "+" button below to get started
+            </Text>
           </View>
         ) : (
-          <View style={tw`bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm`}>
+          <View
+            style={[
+              tw`border rounded-2xl overflow-hidden shadow-sm`,
+              { backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#374151' : '#f3f4f6' },
+            ]}
+          >
             {transactions.slice(0, 5).map((tx, idx) => (
-              <View 
-                key={tx.id} 
-                style={tw`flex-row justify-between items-center px-4 py-3.5 ${
-                  idx < 4 ? 'border-b border-gray-100' : ''
-                }`}
+              <TouchableOpacity
+                key={tx.id}
+                style={[
+                  tw`flex-row justify-between items-center px-4 py-3.5`,
+                  idx < Math.min(transactions.length, 5) - 1
+                    ? { borderBottomWidth: 1, borderColor: isDark ? '#374151' : '#f3f4f6' }
+                    : {},
+                ]}
+                onPress={() => navigation.navigate('AddTransaction', { transaction: tx })}
               >
                 <View style={tw`flex-1 mr-3`}>
                   <View style={tw`flex-row items-center`}>
-                    <Text style={tw`font-bold text-gray-800 text-sm`}>
+                    <Text style={[tw`font-bold text-sm`, { color: isDark ? '#f9fafb' : '#1f2937' }]}>
                       {tx.category} → {tx.subcategory}
                     </Text>
                     {tx.status === 'pending' && (
@@ -290,28 +338,32 @@ export default function HomeScreen({ navigation }: any) {
                       </View>
                     )}
                   </View>
-                  <Text style={tw`text-xs text-gray-400 mt-1`}>
-                    {tx.date} • {tx.payment_method !== 'None' ? tx.payment_method : 'Pending Pay'}
+                  <Text style={{ color: isDark ? '#6b7280' : '#9ca3af', fontSize: 11, marginTop: 2 }}>
+                    {formatDateTime(tx.date, tx.time)} • {tx.payment_method !== 'None' ? tx.payment_method : 'Pending Pay'}
                   </Text>
                   {tx.description ? (
-                    <Text style={tw`text-xs text-gray-500 italic mt-0.5`}>"{tx.description}"</Text>
+                    <Text style={{ color: isDark ? '#6b7280' : '#6b7280', fontSize: 11, fontStyle: 'italic', marginTop: 1 }}>
+                      "{tx.description}"
+                    </Text>
                   ) : null}
                 </View>
-                
-                <Text 
-                  style={tw`text-base font-extrabold ${
-                    tx.type === 'income' ? 'text-emerald-600' : 'text-gray-800'
-                  }`}
+
+                <Text
+                  style={[
+                    tw`text-base font-extrabold`,
+                    { color: tx.type === 'income' ? '#10b981' : (isDark ? '#f9fafb' : '#1f2937') },
+                  ]}
                 >
-                  {tx.type === 'income' ? '+' : '-'}{formatRupees(tx.type === 'income' ? tx.amount : tx.paid_amount || tx.amount)}
+                  {tx.type === 'income' ? '+' : '-'}
+                  {formatRupees(tx.type === 'income' ? tx.amount : tx.paid_amount || tx.amount)}
                 </Text>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         )}
       </ScrollView>
 
-      {/* Floating Action Button (FAB) for Add Entry */}
+      {/* Floating Action Button */}
       <TouchableOpacity
         style={tw`absolute bottom-6 right-6 w-14 h-14 bg-indigo-600 rounded-full items-center justify-center shadow-lg border border-indigo-500`}
         onPress={() => navigation.navigate('AddTransaction')}
@@ -319,7 +371,7 @@ export default function HomeScreen({ navigation }: any) {
         <Text style={tw`text-white text-3xl font-semibold`}>+</Text>
       </TouchableOpacity>
 
-      {/* DUE RECURRING MODAL REVIEW PANEL */}
+      {/* DUE RECURRING MODAL */}
       {showRecurringModal && (
         <Modal
           visible={showRecurringModal}
@@ -328,43 +380,55 @@ export default function HomeScreen({ navigation }: any) {
           onRequestClose={() => setShowRecurringModal(false)}
         >
           <View style={tw`flex-1 justify-end bg-black/50`}>
-            <View style={tw`bg-white rounded-t-3xl p-6 max-h-[80%]`}>
+            <View
+              style={[
+                tw`rounded-t-3xl p-6 max-h-[80%]`,
+                { backgroundColor: isDark ? '#1f2937' : '#ffffff' },
+              ]}
+            >
               <View style={tw`flex-row justify-between items-center mb-4`}>
-                <Text style={tw`text-lg font-bold text-gray-800`}>
+                <Text style={[tw`text-lg font-bold`, { color: isDark ? '#f9fafb' : '#1f2937' }]}>
                   Approve Recurring Entries
                 </Text>
                 <TouchableOpacity onPress={() => setShowRecurringModal(false)}>
-                  <Text style={tw`text-gray-500 font-bold text-sm`}>Close</Text>
+                  <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontWeight: 'bold', fontSize: 14 }}>
+                    Close
+                  </Text>
                 </TouchableOpacity>
               </View>
-              
-              <Text style={tw`text-xs text-gray-400 mb-4`}>
+
+              <Text style={{ color: isDark ? '#6b7280' : '#9ca3af', fontSize: 11, marginBottom: 16 }}>
                 Review and click approve to record these transactions in your ledger.
               </Text>
 
               <ScrollView style={tw`mb-4`}>
-                {dueRecurring.map((item, idx) => {
+                {dueRecurring.map((item) => {
                   const key = item.recurring_id + '-' + item.date;
                   const isApproving = approvingId === key;
                   return (
-                    <View 
-                      key={key} 
-                      style={tw`border border-gray-150 rounded-2xl p-4 mb-3 bg-gray-50 flex-row justify-between items-center`}
+                    <View
+                      key={key}
+                      style={[
+                        tw`border rounded-2xl p-4 mb-3 flex-row justify-between items-center`,
+                        { backgroundColor: isDark ? '#111827' : '#f9fafb', borderColor: isDark ? '#374151' : '#e5e7eb' },
+                      ]}
                     >
                       <View style={tw`flex-1 mr-3`}>
-                        <Text style={tw`text-sm font-bold text-gray-800`}>
+                        <Text style={[tw`text-sm font-bold`, { color: isDark ? '#f9fafb' : '#1f2937' }]}>
                           {item.category} → {item.subcategory}
                         </Text>
-                        <Text style={tw`text-xs text-gray-400 mt-1`}>
-                          Due Date: {item.date}
+                        <Text style={{ color: isDark ? '#6b7280' : '#9ca3af', fontSize: 11, marginTop: 2 }}>
+                          Due: {formatDateTime(item.date)}
                         </Text>
                         {item.description ? (
-                          <Text style={tw`text-xs text-gray-500 italic mt-0.5`}>"{item.description}"</Text>
+                          <Text style={{ color: isDark ? '#6b7280' : '#6b7280', fontSize: 11, fontStyle: 'italic', marginTop: 1 }}>
+                            "{item.description}"
+                          </Text>
                         ) : null}
                       </View>
-                      
+
                       <View style={tw`items-end`}>
-                        <Text style={tw`text-sm font-black text-gray-800 mb-2`}>
+                        <Text style={[tw`text-sm font-black mb-2`, { color: isDark ? '#f9fafb' : '#1f2937' }]}>
                           {formatRupees(item.amount)}
                         </Text>
                         <TouchableOpacity

@@ -12,7 +12,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { useTransactionStore } from '../store/transactionStore';
+import { useIsDark } from '../store/themeStore';
 import { formatRupees } from '../utils/money';
+import { formatDateTime } from '../utils/date';
 import { DEFAULT_EXPENSE_CATEGORIES } from '../utils/categories';
 
 export default function TransactionsScreen({ route, navigation }: any) {
@@ -23,14 +25,16 @@ export default function TransactionsScreen({ route, navigation }: any) {
     isLoading,
   } = useTransactionStore();
 
+  const isDark = useIsDark();
+
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  
+
   // Filters
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense' | 'pending'>('all');
   const [methodFilter, setMethodFilter] = useState<string>('All');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  
+
   // Advanced filter collapse
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -67,25 +71,15 @@ export default function TransactionsScreen({ route, navigation }: any) {
     );
   };
 
-  // 1. Apply frontend filtering & searching
+  // Apply frontend filtering & searching
   const filteredTransactions = transactions.filter((tx) => {
-    // A. Khata Account isolation filter (if locked from route)
-    if (filterKhataId && tx.khata_id !== filterKhataId) {
-      return false;
-    }
-
-    // B. Type filter
+    if (filterKhataId && tx.khata_id !== filterKhataId) return false;
     if (typeFilter === 'income' && tx.type !== 'income') return false;
     if (typeFilter === 'expense' && (tx.type !== 'expense' || tx.status === 'pending')) return false;
     if (typeFilter === 'pending' && tx.status !== 'pending') return false;
-
-    // C. Payment method filter
     if (methodFilter !== 'All' && tx.payment_method !== methodFilter) return false;
-
-    // D. Category filter
     if (selectedCategory !== 'All' && tx.category !== selectedCategory) return false;
 
-    // E. Text search
     if (search.trim() !== '') {
       const query = search.toLowerCase();
       const matchCat = tx.category.toLowerCase().includes(query);
@@ -97,7 +91,7 @@ export default function TransactionsScreen({ route, navigation }: any) {
     return true;
   });
 
-  // 2. Group transactions by date for clean ledger visualization
+  // Group transactions by date
   const groupedTransactions: { [key: string]: typeof transactions } = {};
   filteredTransactions.forEach((tx) => {
     if (!groupedTransactions[tx.date]) {
@@ -106,82 +100,120 @@ export default function TransactionsScreen({ route, navigation }: any) {
     groupedTransactions[tx.date].push(tx);
   });
 
-  // Sorted dates descending
   const sortedDates = Object.keys(groupedTransactions).sort((a, b) => b.localeCompare(a));
 
+  const bg = isDark ? '#111827' : '#f9fafb';
+  const cardBg = isDark ? '#1f2937' : '#ffffff';
+  const borderColor = isDark ? '#374151' : '#f3f4f6';
+  const textPrimary = isDark ? '#f9fafb' : '#1f2937';
+  const textSecondary = isDark ? '#9ca3af' : '#6b7280';
+  const textMuted = isDark ? '#6b7280' : '#9ca3af';
+  const inputBg = isDark ? '#374151' : '#f3f4f6';
+  const chipInactiveBg = isDark ? '#374151' : '#f3f4f6';
+  const chipInactiveBorder = isDark ? '#4b5563' : '#e5e7eb';
+  const chipInactiveText = isDark ? '#9ca3af' : '#6b7280';
+
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      
-      {/* Search Header */}
-      <View style={tw`bg-white px-6 py-4 border-b border-gray-150`}>
-        <View style={tw`bg-gray-100 rounded-xl px-4 py-2 flex-row items-center mb-3`}>
+    <SafeAreaView style={[tw`flex-1`, { backgroundColor: bg }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? '#1f2937' : '#ffffff'}
+      />
+
+      {/* Search & Filter Header */}
+      <View style={[tw`px-6 py-4 border-b`, { backgroundColor: cardBg, borderColor }]}>
+        {/* Search Box */}
+        <View style={[tw`rounded-xl px-4 py-2.5 flex-row items-center mb-3`, { backgroundColor: inputBg }]}>
           <TextInput
-            style={tw`flex-1 text-sm text-gray-800`}
-            placeholder="Search details, category, subcategory..."
-            placeholderTextColor="#9ca3af"
+            style={[tw`flex-1 text-sm`, { color: textPrimary }]}
+            placeholder="Search category, description..."
+            placeholderTextColor={textMuted}
             value={search}
             onChangeText={setSearch}
+            returnKeyType="search"
           />
           {search !== '' && (
             <TouchableOpacity onPress={() => setSearch('')}>
-              <Text style={tw`text-xs text-gray-400 font-bold px-1`}>Clear</Text>
+              <Text style={{ color: textMuted, fontWeight: 'bold', fontSize: 12 }}>Clear</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Filter chips row */}
+        {/* Filter Chips */}
         <View style={tw`flex-row justify-between items-center`}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={tw`flex-row gap-1.5 py-1`}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={tw`flex-row gap-1.5 py-1`}
+            keyboardShouldPersistTaps="handled"
+          >
             {(['all', 'income', 'expense', 'pending'] as const).map((filter) => (
               <TouchableOpacity
                 key={filter}
-                style={tw`rounded-lg px-3.5 py-1.5 ${
+                style={[
+                  tw`rounded-lg px-3.5 py-1.5`,
                   typeFilter === filter
-                    ? 'bg-indigo-600'
-                    : 'bg-gray-100 border border-gray-200'
-                }`}
+                    ? { backgroundColor: '#4f46e5' }
+                    : { backgroundColor: chipInactiveBg, borderWidth: 1, borderColor: chipInactiveBorder },
+                ]}
                 onPress={() => setTypeFilter(filter)}
               >
                 <Text
-                  style={tw`text-xs font-bold capitalize ${
-                    typeFilter === filter ? 'text-white' : 'text-gray-600'
-                  }`}
+                  style={[
+                    tw`text-xs font-bold capitalize`,
+                    { color: typeFilter === filter ? '#ffffff' : chipInactiveText },
+                  ]}
                 >
-                  {filter === 'pending' ? 'Khata (Pending)' : filter}
+                  {filter === 'pending' ? 'Khata' : filter}
                 </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
-          <TouchableOpacity 
-            style={tw`ml-2 border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50`}
+          <TouchableOpacity
+            style={[
+              tw`ml-2 border rounded-lg px-2 py-1.5`,
+              { backgroundColor: chipInactiveBg, borderColor: chipInactiveBorder },
+            ]}
             onPress={() => setShowAdvanced(!showAdvanced)}
           >
-            <Text style={tw`text-xs font-bold text-gray-600`}>Filters</Text>
+            <Text style={{ color: chipInactiveText, fontWeight: 'bold', fontSize: 11 }}>
+              {showAdvanced ? 'Less ▲' : 'Filters ▼'}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Advanced Filters dropdown panel */}
+        {/* Advanced Filters */}
         {showAdvanced && (
-          <View style={tw`mt-4 pt-3 border-t border-gray-100`}>
-            {/* Category Filter */}
+          <View style={[tw`mt-3 pt-3 border-t`, { borderColor }]}>
             <View style={tw`mb-3`}>
-              <Text style={tw`text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5`}>
-                Category Filter
+              <Text style={[tw`text-[10px] font-bold uppercase tracking-wider mb-1.5`, { color: textMuted }]}>
+                Category
               </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={tw`flex-row gap-1.5`}>
-                {['All', ...DEFAULT_EXPENSE_CATEGORIES.map(c => c.name), 'Salary', 'Freelance', 'Business'].map((cat) => (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={tw`flex-row gap-1.5`}
+                keyboardShouldPersistTaps="handled"
+              >
+                {['All', ...DEFAULT_EXPENSE_CATEGORIES.map((c) => c.name), 'Salary', 'Freelance', 'Business'].map((cat) => (
                   <TouchableOpacity
                     key={cat}
-                    style={tw`border rounded-lg px-2.5 py-1 ${
-                      selectedCategory === cat ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 bg-white'
-                    }`}
+                    style={[
+                      tw`border rounded-lg px-2.5 py-1`,
+                      selectedCategory === cat
+                        ? { borderColor: '#4f46e5', backgroundColor: isDark ? '#1e1b4b' : '#eef2ff' }
+                        : { borderColor: chipInactiveBorder, backgroundColor: cardBg },
+                    ]}
                     onPress={() => setSelectedCategory(cat)}
                   >
-                    <Text style={tw`text-[10px] font-bold ${
-                      selectedCategory === cat ? 'text-indigo-600' : 'text-gray-600'
-                    }`}>
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 'bold',
+                        color: selectedCategory === cat ? '#4f46e5' : chipInactiveText,
+                      }}
+                    >
                       {cat}
                     </Text>
                   </TouchableOpacity>
@@ -189,28 +221,39 @@ export default function TransactionsScreen({ route, navigation }: any) {
               </ScrollView>
             </View>
 
-            {/* Payment Method Filter */}
-            <View style={tw`mb-1`}>
-              <Text style={tw`text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5`}>
+            <View>
+              <Text style={[tw`text-[10px] font-bold uppercase tracking-wider mb-1.5`, { color: textMuted }]}>
                 Payment Method
               </Text>
-              <View style={tw`flex-row gap-1.5`}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={tw`flex-row gap-1.5`}
+                keyboardShouldPersistTaps="handled"
+              >
                 {['All', 'UPI', 'Cash', 'Debit Card', 'Credit Card'].map((method) => (
                   <TouchableOpacity
                     key={method}
-                    style={tw`border rounded-lg px-3 py-1 bg-white ${
-                      methodFilter === method ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200'
-                    }`}
+                    style={[
+                      tw`border rounded-lg px-3 py-1`,
+                      methodFilter === method
+                        ? { borderColor: '#4f46e5', backgroundColor: isDark ? '#1e1b4b' : '#eef2ff' }
+                        : { borderColor: chipInactiveBorder, backgroundColor: cardBg },
+                    ]}
                     onPress={() => setMethodFilter(method)}
                   >
-                    <Text style={tw`text-[10px] font-bold ${
-                      methodFilter === method ? 'text-indigo-600' : 'text-gray-600'
-                    }`}>
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 'bold',
+                        color: methodFilter === method ? '#4f46e5' : chipInactiveText,
+                      }}
+                    >
                       {method}
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
             </View>
           </View>
         )}
@@ -219,103 +262,172 @@ export default function TransactionsScreen({ route, navigation }: any) {
       {/* Transactions List */}
       <ScrollView
         contentContainerStyle={tw`p-6 pb-24`}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#4f46e5']} />
         }
       >
         {filterKhataId && (
-          <View style={tw`bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex-row justify-between items-center mb-4`}>
-            <Text style={tw`text-xs font-semibold text-indigo-800`}>
+          <View
+            style={[
+              tw`border rounded-xl p-3 flex-row justify-between items-center mb-4`,
+              { backgroundColor: isDark ? '#1e1b4b' : '#eef2ff', borderColor: isDark ? '#3730a3' : '#c7d2fe' },
+            ]}
+          >
+            <Text style={{ color: isDark ? '#a5b4fc' : '#3730a3', fontSize: 12, fontWeight: '600' }}>
               Locked: Showing provider history
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 navigation.setParams({ filterKhataId: null });
                 fetchTransactions();
               }}
             >
-              <Text style={tw`text-xs font-bold text-indigo-700 underline`}>Clear Lock</Text>
+              <Text style={{ color: '#4f46e5', fontSize: 12, fontWeight: 'bold', textDecorationLine: 'underline' }}>
+                Clear Lock
+              </Text>
             </TouchableOpacity>
           </View>
         )}
 
         {sortedDates.length === 0 ? (
-          <View style={tw`bg-white border border-gray-100 rounded-2xl p-8 items-center border-dashed mt-4`}>
-            <Text style={tw`text-gray-400 text-sm font-semibold`}>No transactions match filters</Text>
-            <Text style={tw`text-gray-400 text-xs mt-1`}>Adjust your search query or chips to view history</Text>
+          <View
+            style={[
+              tw`border border-dashed rounded-2xl p-8 items-center mt-4`,
+              { backgroundColor: cardBg, borderColor: isDark ? '#374151' : '#e5e7eb' },
+            ]}
+          >
+            <Text style={{ color: textMuted, fontSize: 14, fontWeight: '600' }}>
+              No transactions match filters
+            </Text>
+            <Text style={{ color: textMuted, fontSize: 12, marginTop: 4 }}>
+              Adjust your search or filter chips
+            </Text>
           </View>
         ) : (
           sortedDates.map((date) => (
             <View key={date} style={tw`mb-5`}>
               {/* Date Header */}
-              <Text style={tw`text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5 px-1`}>
-                {date}
+              <Text
+                style={[
+                  tw`text-xs font-bold uppercase tracking-wider mb-2.5 px-1`,
+                  { color: textMuted },
+                ]}
+              >
+                {formatDateTime(date)}
               </Text>
 
-              {/* Transactions in Date Group */}
-              <View style={tw`bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm`}>
+              {/* Cards in Date Group */}
+              <View
+                style={[
+                  tw`border rounded-2xl overflow-hidden shadow-sm`,
+                  { backgroundColor: cardBg, borderColor },
+                ]}
+              >
                 {groupedTransactions[date].map((tx, idx) => {
                   const isExpanded = expandedTxId === tx.id;
                   return (
                     <View key={tx.id}>
                       <TouchableOpacity
-                        style={tw`flex-row justify-between items-center px-4 py-3.5 ${
-                          idx < groupedTransactions[date].length - 1 ? 'border-b border-gray-100' : ''
-                        }`}
+                        style={[
+                          tw`flex-row justify-between items-center px-4 py-3.5`,
+                          idx < groupedTransactions[date].length - 1
+                            ? { borderBottomWidth: 1, borderColor }
+                            : {},
+                        ]}
                         onPress={() => setExpandedTxId(isExpanded ? null : tx.id)}
                       >
                         <View style={tw`flex-1 mr-3`}>
-                          <View style={tw`flex-row items-center`}>
-                            <Text style={tw`font-bold text-gray-800 text-sm`}>
+                          <View style={tw`flex-row items-center flex-wrap`}>
+                            <Text style={[tw`font-bold text-sm`, { color: textPrimary }]}>
                               {tx.category} → {tx.subcategory}
                             </Text>
                             {tx.status === 'pending' && (
-                              <View style={tw`bg-amber-100 rounded px-1.5 py-0.5 ml-2`}>
+                              <View style={tw`bg-amber-100 rounded px-1.5 py-0.5 ml-2 mt-0.5`}>
                                 <Text style={tw`text-amber-800 text-[10px] font-bold`}>Pending</Text>
                               </View>
                             )}
                             {tx.status === 'partially_paid' && (
-                              <View style={tw`bg-orange-100 rounded px-1.5 py-0.5 ml-2`}>
+                              <View style={tw`bg-orange-100 rounded px-1.5 py-0.5 ml-2 mt-0.5`}>
                                 <Text style={tw`text-orange-800 text-[10px] font-bold`}>Partial</Text>
                               </View>
                             )}
                           </View>
-                          <Text style={tw`text-xs text-gray-400 mt-1`}>
-                            {tx.time} • {tx.payment_method !== 'None' ? tx.payment_method : 'Pending Pay'}
+                          <Text style={{ color: textMuted, fontSize: 11, marginTop: 2 }}>
+                            {formatDateTime(tx.date, tx.time)} • {tx.payment_method !== 'None' ? tx.payment_method : 'Pending Pay'}
                           </Text>
                           {tx.description ? (
-                            <Text style={tw`text-xs text-gray-500 italic mt-0.5`}>"{tx.description}"</Text>
+                            <Text style={{ color: textSecondary, fontSize: 11, fontStyle: 'italic', marginTop: 1 }}>
+                              "{tx.description}"
+                            </Text>
                           ) : null}
                         </View>
-                        
-                        <Text 
-                          style={tw`text-base font-extrabold ${
-                            tx.type === 'income' ? 'text-emerald-600' : 'text-gray-800'
-                          }`}
+
+                        <Text
+                          style={[
+                            tw`text-base font-extrabold`,
+                            { color: tx.type === 'income' ? '#10b981' : textPrimary },
+                          ]}
                         >
-                          {tx.type === 'income' ? '+' : '-'}{formatRupees(tx.type === 'income' ? tx.amount : tx.paid_amount || tx.amount)}
+                          {tx.type === 'income' ? '+' : '-'}
+                          {formatRupees(tx.type === 'income' ? tx.amount : tx.paid_amount || tx.amount)}
                         </Text>
                       </TouchableOpacity>
 
-                      {/* Expandable details panel with Delete option */}
+                      {/* Expandable Detail Row */}
                       {isExpanded && (
-                        <View style={tw`bg-gray-50 px-4 py-3 flex-row justify-between items-center border-t border-b border-gray-100`}>
+                        <View
+                          style={[
+                            tw`px-4 py-3 flex-row justify-between items-center border-t border-b`,
+                            {
+                              backgroundColor: isDark ? '#111827' : '#f9fafb',
+                              borderColor,
+                            },
+                          ]}
+                        >
                           <View>
-                            <Text style={tw`text-[10px] text-gray-400 font-semibold uppercase`}>Full Amount</Text>
-                            <Text style={tw`text-sm font-bold text-gray-700`}>{formatRupees(tx.amount)}</Text>
+                            <Text style={{ color: textMuted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase' }}>
+                              Full Amount
+                            </Text>
+                            <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>
+                              {formatRupees(tx.amount)}
+                            </Text>
                           </View>
                           {tx.status !== 'paid' && (
                             <View style={tw`items-end`}>
-                              <Text style={tw`text-[10px] text-gray-400 font-semibold uppercase`}>Remaining</Text>
-                              <Text style={tw`text-sm font-bold text-amber-600`}>{formatRupees(tx.pending_amount)}</Text>
+                              <Text style={{ color: textMuted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase' }}>
+                                Remaining
+                              </Text>
+                              <Text style={tw`text-sm font-bold text-amber-500`}>
+                                {formatRupees(tx.pending_amount)}
+                              </Text>
                             </View>
                           )}
-                          <TouchableOpacity 
-                            style={tw`bg-red-50 border border-red-200 rounded-lg px-3 py-1.5`}
-                            onPress={() => handleDelete(tx.id)}
-                          >
-                            <Text style={tw`text-red-600 text-xs font-bold`}>Delete</Text>
-                          </TouchableOpacity>
+
+                          <View style={tw`flex-row gap-2`}>
+                            <TouchableOpacity
+                              style={[
+                                tw`border rounded-lg px-3 py-1.5`,
+                                { borderColor: '#4f46e5', backgroundColor: isDark ? '#1e1b4b' : '#eef2ff' },
+                              ]}
+                              onPress={() => {
+                                setExpandedTxId(null);
+                                navigation.navigate('AddTransaction', { transaction: tx });
+                              }}
+                            >
+                              <Text style={{ color: '#4f46e5', fontSize: 12, fontWeight: 'bold' }}>Edit</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={[
+                                tw`border rounded-lg px-3 py-1.5`,
+                                { borderColor: '#fca5a5', backgroundColor: isDark ? '#450a0a' : '#fff1f2' },
+                              ]}
+                              onPress={() => handleDelete(tx.id)}
+                            >
+                              <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: 'bold' }}>Delete</Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       )}
                     </View>

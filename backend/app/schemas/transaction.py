@@ -18,6 +18,19 @@ class TransactionCreate(TransactionBase):
     status: str = Field("paid", description="paid, pending, or partially_paid")
     paid_amount: Optional[int] = Field(None, description="Paid amount in paise. Defaults based on status.")
 
+class TransactionUpdate(BaseModel):
+    amount: Optional[int] = Field(None, description="Amount in paise")
+    type: Optional[str] = Field(None, description="income or expense")
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    payment_method: Optional[str] = Field(None, description="UPI, Cash, Debit Card, Credit Card, or None")
+    date: Optional[str] = Field(None, description="YYYY-MM-DD format")
+    time: Optional[str] = Field(None, description="HH:MM:SS format")
+    description: Optional[str] = None
+    status: Optional[str] = Field(None, description="paid, pending, or partially_paid")
+    paid_amount: Optional[int] = Field(None, description="Paid amount in paise")
+    khata_id: Optional[str] = Field(None, description="Optional associated Khata Account ID")
+
 class TransactionResponse(TransactionBase):
     id: str
     paid_amount: int
@@ -36,6 +49,7 @@ class TransactionResponse(TransactionBase):
 class KhataAccountBase(BaseModel):
     name: str = Field(..., description="Name of the person, supplier or service (e.g., Tiffin, Milkman)")
     description: Optional[str] = ""
+    client_ref_id: Optional[str] = Field(None, description="Unique client-side reference ID for offline idempotency")
 
 class KhataAccountCreate(KhataAccountBase):
     pass

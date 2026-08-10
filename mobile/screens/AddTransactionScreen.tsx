@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   StatusBar,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
@@ -15,9 +17,10 @@ import { useTransactionStore } from '../store/transactionStore';
 import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from '../utils/categories';
 import { rupeesToPaise } from '../utils/money';
 
-export default function AddTransactionScreen({ navigation }: any) {
+export default function AddTransactionScreen({ route, navigation }: any) {
   const {
     addTransaction,
+    updateTransaction,
     khataAccounts,
     fetchKhataAccounts,
     lastUsedExpenseCategory,
@@ -28,33 +31,42 @@ export default function AddTransactionScreen({ navigation }: any) {
     isLoading,
   } = useTransactionStore();
 
-  const [txType, setTxType] = useState<'expense' | 'income' | 'khata'>('expense');
-  const [amountStr, setAmountStr] = useState('');
-  const [category, setCategory] = useState('');
-  const [subcategory, setSubcategory] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('UPI');
-  const [description, setDescription] = useState('');
+  const editTx = route.params?.transaction || null;
+  const isEditing = !!editTx;
+
+  const [txType, setTxType] = useState<'expense' | 'income' | 'khata'>(
+    editTx ? (editTx.khata_id ? 'khata' : editTx.type) : 'expense'
+  );
+  const [amountStr, setAmountStr] = useState(
+    editTx ? (editTx.amount / 100).toString() : ''
+  );
+  const [category, setCategory] = useState(editTx ? editTx.category : '');
+  const [subcategory, setSubcategory] = useState(editTx ? editTx.subcategory : '');
+  const [paymentMethod, setPaymentMethod] = useState(editTx ? editTx.payment_method : 'UPI');
+  const [description, setDescription] = useState(editTx ? editTx.description || '' : '');
   
   // Khata selection
-  const [selectedKhataId, setSelectedKhataId] = useState('');
+  const [selectedKhataId, setSelectedKhataId] = useState(editTx ? editTx.khata_id || '' : '');
 
   // Date and Time (Auto-filled)
   const [showDateTimeEdit, setShowDateTimeEdit] = useState(false);
-  const [dateStr, setDateStr] = useState('');
-  const [timeStr, setTimeStr] = useState('');
+  const [dateStr, setDateStr] = useState(editTx ? editTx.date : '');
+  const [timeStr, setTimeStr] = useState(editTx ? editTx.time : '');
 
   // Initialize date/time on mount
   useEffect(() => {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const hh = String(now.getHours()).padStart(2, '0');
-    const min = String(now.getMinutes()).padStart(2, '0');
-    const ss = String(now.getSeconds()).padStart(2, '0');
-    
-    setDateStr(`${yyyy}-${mm}-${dd}`);
-    setTimeStr(`${hh}:${min}:${ss}`);
+    if (!isEditing) {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const hh = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      
+      setDateStr(`${yyyy}-${mm}-${dd}`);
+      setTimeStr(`${hh}:${min}:${ss}`);
+    }
     
     // Fetch Khata accounts and load user settings
     fetchKhataAccounts();
@@ -63,6 +75,7 @@ export default function AddTransactionScreen({ navigation }: any) {
 
   // Pre-populate defaults when store variables load or type changes
   useEffect(() => {
+    if (isEditing) return;
     if (txType === 'expense') {
       setCategory(lastUsedExpenseCategory || DEFAULT_EXPENSE_CATEGORIES[0].name);
       setSubcategory(lastUsedExpenseSubcategory || DEFAULT_EXPENSE_CATEGORIES[0].subcategories[0]);
@@ -103,7 +116,7 @@ export default function AddTransactionScreen({ navigation }: any) {
     let txData: any = {
       amount: paise,
       type: txType === 'income' ? 'income' : 'expense',
-      status: txType === 'khata' ? 'pending' : 'paid',
+      status: txType === 'khata' ? 'pending' : (editTx ? editTx.status : 'paid'),
       category,
       subcategory: txType === 'income' ? 'General' : subcategory,
       payment_method: txType === 'khata' ? 'None' : paymentMethod,
@@ -114,14 +127,22 @@ export default function AddTransactionScreen({ navigation }: any) {
 
     if (txType === 'khata') {
       txData.khata_id = selectedKhataId;
+    } else {
+      txData.khata_id = null;
     }
 
-    const success = await addTransaction(txData);
+    let success = false;
+    if (isEditing) {
+      success = await updateTransaction(editTx.id, txData);
+    } else {
+      success = await addTransaction(txData);
+    }
+
     if (success) {
       // Clear forms
       setAmountStr('');
       setDescription('');
-      Alert.alert('Success', 'Transaction recorded successfully!', [
+      Alert.alert('Success', isEditing ? 'Transaction updated successfully!' : 'Transaction recorded successfully!', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
     } else {
@@ -136,11 +157,17 @@ export default function AddTransactionScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={tw`text-indigo-600 text-sm font-semibold`}>Cancel</Text>
         </TouchableOpacity>
-        <Text style={tw`text-lg font-bold text-gray-800`}>Record Entry</Text>
+        <Text style={tw`text-lg font-bold text-gray-800`}>
+          {isEditing ? 'Edit Entry' : 'Record Entry'}
+        </Text>
         <View style={tw`w-10`} />
       </View>
 
-      <ScrollView contentContainerStyle={tw`p-6`}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={tw`flex-1`}
+      >
+        <ScrollView contentContainerStyle={tw`p-6 pb-12`} keyboardShouldPersistTaps="handled">
         {/* Transaction Type Segment Selector */}
         <View style={tw`flex-row bg-gray-200 rounded-xl p-1 mb-6`}>
           {(['expense', 'income', 'khata'] as const).map((type) => (
@@ -409,7 +436,8 @@ export default function AddTransactionScreen({ navigation }: any) {
             <Text style={tw`text-white text-base font-bold`}>Save Transaction</Text>
           )}
         </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

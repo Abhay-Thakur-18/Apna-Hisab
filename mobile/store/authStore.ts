@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL, setAuthToken, clearAuthToken } from '../services/api';
+import { API_URL, setAuthToken, clearAuthToken, OFFLINE_ONLY } from '../services/api';
 
 interface User {
   id: string;
@@ -31,15 +31,24 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  token: null,
-  user: null,
-  isAuthenticated: false,
-  isLoading: true,
+  token: 'offline_token',
+  user: {
+    id: 'offline_user',
+    email: 'offline@local.app',
+    name: 'Offline User',
+    created_at: new Date().toISOString()
+  },
+  isAuthenticated: true,
+  isLoading: false,
   error: null,
   appPin: null,
   isAppLocked: false,
 
   login: async (email, password) => {
+    if (OFFLINE_ONLY) {
+      set({ isAuthenticated: true, isLoading: false, token: 'offline_token' });
+      return true;
+    }
     set({ isLoading: true, error: null });
     try {
       const response = await fetch(`${API_URL}/api/auth/login`, {
@@ -72,6 +81,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   register: async (name, email, password) => {
+    if (OFFLINE_ONLY) {
+      set({ isAuthenticated: true, isLoading: false, token: 'offline_token' });
+      return true;
+    }
     set({ isLoading: true, error: null });
     try {
       const response = await fetch(`${API_URL}/api/auth/register`, {
@@ -116,6 +129,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   loginWithGoogle: async (idToken) => {
+    if (OFFLINE_ONLY) {
+      set({ isAuthenticated: true, isLoading: false, token: 'offline_token' });
+      return true;
+    }
     set({ isLoading: true, error: null });
     try {
       const response = await fetch(`${API_URL}/api/auth/google`, {
@@ -148,6 +165,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    if (OFFLINE_ONLY) {
+      return;
+    }
     set({ isLoading: true });
     try {
       await AsyncStorage.removeItem('token');
@@ -165,53 +185,25 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   restoreSession: async () => {
-    set({ isLoading: true });
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const userStr = await AsyncStorage.getItem('user');
-      const pin = await AsyncStorage.getItem('app_pin');
-      
-      if (token && userStr) {
-        setAuthToken(token);
-        // Verify token with backend /me check to ensure session is still valid
-        const response = await fetch(`${API_URL}/api/auth/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-          const user = JSON.parse(userStr);
-          set({
-            token,
-            user,
-            appPin: pin,
-            isAppLocked: pin ? true : false,
-            isAuthenticated: true,
-            isLoading: false
-          });
-          return;
-        }
-      }
-      
-      // If verification failed or no session found
-      await AsyncStorage.removeItem('token');
-      await AsyncStorage.removeItem('user');
-      clearAuthToken();
-      set({
-        token: null,
-        user: null,
-        appPin: pin,
-        isAppLocked: false,
-        isAuthenticated: false,
-        isLoading: false
-      });
-    } catch (err) {
-      set({ isLoading: false });
-    }
+    set({
+      token: 'offline_token',
+      user: {
+        id: 'offline_user',
+        email: 'offline@local.app',
+        name: 'Offline User',
+        created_at: new Date().toISOString()
+      },
+      appPin: null,
+      isAppLocked: false,
+      isAuthenticated: true,
+      isLoading: false
+    });
   },
 
   clearError: () => set({ error: null }),
 
   setAppPin: async (pin) => {
+    if (OFFLINE_ONLY) return;
     if (pin) {
       await AsyncStorage.setItem('app_pin', pin);
     } else {
@@ -221,11 +213,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   unlockApp: (pin) => {
-    // We cannot use get() in simple store setup unless we have get passed in.
-    // In our create parameters, `(set, get)` is indeed passed (wait, in line 27 it's `(set) => ({`).
-    // Wait, let's look at line 27: export const useAuthStore = create<AuthState>((set) => ({
-    // Since `get` is not passed to create, we can just use the state directly. Or we can edit line 27 to add `get`.
-    // Actually, we can read the store state using useAuthStore.getState()! That is extremely clean and works everywhere!
+    if (OFFLINE_ONLY) return true;
     const state = useAuthStore.getState();
     if (pin === state.appPin) {
       set({ isAppLocked: false });
@@ -235,6 +223,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   lockApp: () => {
+    if (OFFLINE_ONLY) return;
     const state = useAuthStore.getState();
     if (state.appPin) {
       set({ isAppLocked: true });

@@ -6,9 +6,9 @@ from app.core.database import get_db
 from app.auth.dependencies import get_current_user
 from app.schemas.transaction import (
     TransactionCreate, TransactionResponse, 
-    PaymentCreate, PaymentResponse
+    PaymentCreate, PaymentResponse, TransactionUpdate
 )
-from app.services.transaction_service import create_transaction, record_payment
+from app.services.transaction_service import create_transaction, record_payment, update_transaction
 from app.utils.serialize import serialize_doc, serialize_list
 
 router = APIRouter(prefix="/api/transactions", tags=["Transactions"])
@@ -16,6 +16,10 @@ router = APIRouter(prefix="/api/transactions", tags=["Transactions"])
 @router.post("", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED)
 async def add_transaction(tx: TransactionCreate, current_user: dict = Depends(get_current_user)):
     return await create_transaction(current_user["id"], tx)
+
+@router.patch("/{id}", response_model=TransactionResponse)
+async def modify_transaction(id: str, tx: TransactionUpdate, current_user: dict = Depends(get_current_user)):
+    return await update_transaction(current_user["id"], id, tx)
 
 @router.post("/payment", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def make_payment(payment: PaymentCreate, current_user: dict = Depends(get_current_user)):

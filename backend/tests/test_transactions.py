@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
-from app.schemas.transaction import TransactionCreate, PaymentCreate
-from app.services.transaction_service import create_transaction, record_payment
+from app.schemas.transaction import TransactionCreate, PaymentCreate, TransactionUpdate
+from app.services.transaction_service import create_transaction, record_payment, update_transaction
 from app.core.database import get_db
 from bson import ObjectId
 
@@ -168,3 +168,40 @@ async def test_partial_and_full_payment_flow(clear_collections):
     with pytest.raises(HTTPException) as exc_info:
         await record_payment(USER_A, pay_in_invalid)
     assert exc_info.value.status_code == 400
+
+@pytest.mark.asyncio
+async def test_update_transaction(clear_collections):
+    # Create transaction
+    tx_in = TransactionCreate(
+        amount=5000,
+        type="expense",
+        status="pending",
+        category="Travel",
+        subcategory="Cab",
+        payment_method="None",
+        date="2026-08-09",
+        time="12:00:00"
+    )
+    tx = await create_transaction(USER_A, tx_in)
+    
+    # Update category, amount, status
+    tx_update = TransactionUpdate(
+        amount=6000,
+        status="paid",
+        category="Transport",
+        payment_method="Cash"
+    )
+    updated = await update_transaction(USER_A, tx["id"], tx_update)
+    
+    assert updated["amount"] == 6000
+    assert updated["status"] == "paid"
+    assert updated["category"] == "Transport"
+    assert updated["payment_method"] == "Cash"
+    assert updated["paid_amount"] == 6000
+    assert updated["pending_amount"] == 0
+    
+    # Verify User B cannot edit USER A's transaction
+    with pytest.raises(HTTPException) as exc_info:
+        await update_transaction(USER_B, tx["id"], tx_update)
+    assert exc_info.value.status_code == 404
+

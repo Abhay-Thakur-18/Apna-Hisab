@@ -16,13 +16,39 @@ async def create_khata_account(
 ):
     db = get_db()
     
+    # Deduplicate check for offline-first idempotency
+    if account.client_ref_id:
+        existing = await db.khata_accounts.find_one({
+            "user_id": ObjectId(current_user["id"]),
+            "client_ref_id": account.client_ref_id
+        })
+        if existing:
+            res = serialize_doc(existing)
+            # Calculate stats for this specific account
+            pipeline = [
+                {"$match": {"user_id": ObjectId(current_user["id"]), "khata_id": existing["_id"]}},
+                {"$group": {
+                    "_id": "$khata_id",
+                    "total_pending": {"$sum": "$pending_amount"},
+                    "total_paid": {"$sum": "$paid_amount"}
+                }}
+            ]
+            agg_cursor = db.transactions.aggregate(pipeline)
+            stats = await agg_cursor.to_list(length=1)
+            stat = stats[0] if stats else {"total_pending": 0, "total_paid": 0}
+            
+            res["total_pending"] = stat["total_pending"]
+            res["total_paid"] = stat["total_paid"]
+            res["outstanding"] = stat["total_pending"]
+            return res
+
     # Check if a khata account with the same name already exists for the user
-    existing = await db.khata_accounts.find_one({
+    existing_name = await db.khata_accounts.find_one({
         "user_id": ObjectId(current_user["id"]),
         "name": {"$regex": f"^{account.name}$", "$options": "i"}
     })
     
-    if existing:
+    if existing_name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A Khata account with this name already exists."
@@ -32,6 +58,7 @@ async def create_khata_account(
         "user_id": ObjectId(current_user["id"]),
         "name": account.name,
         "description": account.description,
+        "client_ref_id": account.client_ref_id,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc)
     }

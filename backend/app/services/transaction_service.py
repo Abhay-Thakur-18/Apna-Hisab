@@ -2,7 +2,7 @@ from bson import ObjectId
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from app.core.database import get_db
-from app.schemas.transaction import TransactionCreate, PaymentCreate
+from app.schemas.transaction import TransactionCreate, PaymentCreate, TransactionUpdate
 from app.utils.serialize import serialize_doc
 
 async def create_transaction(user_id: str, tx_in: TransactionCreate) -> dict:
@@ -190,3 +190,112 @@ async def record_payment(user_id: str, payment_in: PaymentCreate) -> dict:
     )
     
     return serialize_doc(payment_doc)
+
+async def update_transaction(user_id: str, tx_id: str, tx_update: TransactionUpdate) -> dict:
+    """
+    Updates an existing transaction, validating inputs and recalculating paid/pending amounts.
+    """
+    db = get_db()
+    try:
+        tx_oid = ObjectId(tx_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Transaction ID format."
+        )
+        
+    transaction = await db.transactions.find_one({"_id": tx_oid, "user_id": ObjectId(user_id)})
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found or unauthorized access."
+        )
+
+    update_data = {}
+    amount = tx_update.amount if tx_update.amount is not None else transaction["amount"]
+    status_val = tx_update.status.lower() if tx_update.status is not None else transaction["status"]
+    
+    if tx_update.type is not None:
+        tx_type = tx_update.type.lower()
+        if tx_type not in ["income", "expense"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Transaction type must be 'income' or 'expense'."
+            )
+        update_data["type"] = tx_type
+    else:
+        tx_type = transaction["type"]
+
+    if status_val == "paid":
+        paid_amount = amount
+        pending_amount = 0
+    elif status_val == "pending":
+        paid_amount = 0
+        pending_amount = amount
+    elif status_val == "partially_paid":
+        if tx_update.paid_amount is not None:
+            paid_amount = tx_update.paid_amount
+        else:
+            paid_amount = transaction.get("paid_amount", 0) if transaction["status"] == "partially_paid" else 0
+            
+        if paid_amount <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Paid amount must be greater than 0 for partially paid transactions."
+            )
+        if paid_amount >= amount:
+            status_val = "paid"
+            paid_amount = amount
+            pending_amount = 0
+        else:
+            pending_amount = amount - paid_amount
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Transaction status must be 'paid', 'pending', or 'partially_paid'."
+        )
+
+    update_data["amount"] = amount
+    update_data["status"] = status_val
+    update_data["paid_amount"] = paid_amount
+    update_data["pending_amount"] = pending_amount
+
+    if tx_update.category is not None:
+        update_data["category"] = tx_update.category
+    if tx_update.subcategory is not None:
+        update_data["subcategory"] = tx_update.subcategory
+    if tx_update.payment_method is not None:
+        update_data["payment_method"] = tx_update.payment_method
+    if tx_update.date is not None:
+        update_data["date"] = tx_update.date
+    if tx_update.time is not None:
+        update_data["time"] = tx_update.time
+    if tx_update.description is not None:
+        update_data["description"] = tx_update.description
+
+    if tx_update.khata_id is not None:
+        if tx_update.khata_id == "" or tx_update.khata_id is None:
+            update_data["khata_id"] = None
+        else:
+            try:
+                khata_oid = ObjectId(tx_update.khata_id)
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid Khata Account ID format."
+                )
+            khata_acc = await db.khata_accounts.find_one({"_id": khata_oid, "user_id": ObjectId(user_id)})
+            if not khata_acc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Associated Khata Account not found."
+                )
+            update_data["khata_id"] = khata_oid
+
+    update_data["updated_at"] = datetime.now(timezone.utc)
+
+    await db.transactions.update_one({"_id": tx_oid}, {"$set": update_data})
+    
+    updated_doc = await db.transactions.find_one({"_id": tx_oid})
+    return serialize_doc(updated_doc)
+

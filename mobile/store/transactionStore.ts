@@ -46,6 +46,7 @@ interface TransactionState {
 
   fetchTransactions: () => Promise<void>;
   addTransaction: (txData: any) => Promise<boolean>;
+  updateTransaction: (id: string, updatedFields: any) => Promise<boolean>;
   recordPayment: (paymentData: any) => Promise<boolean>;
   fetchKhataAccounts: () => Promise<void>;
   createKhataAccount: (name: string, description: string) => Promise<boolean>;
@@ -84,12 +85,28 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   fetchTransactions: async () => {
+    // 1. Try to load from AsyncStorage first if state is empty
+    try {
+      const cached = await AsyncStorage.getItem('offline_transactions');
+      if (cached && get().transactions.length === 0) {
+        set({ transactions: JSON.parse(cached) });
+      }
+    } catch (e) {
+      console.log('Error loading cached transactions:', e);
+    }
+
     set({ isLoading: true, error: null });
     try {
       const data = await apiRequest('/api/transactions?limit=100');
       set({ transactions: data, isLoading: false });
+      await AsyncStorage.setItem('offline_transactions', JSON.stringify(data));
     } catch (err: any) {
-      set({ error: err.message || 'Failed to fetch transactions', isLoading: false });
+      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch') || err.message.includes('unreachable')) {
+        console.log('[Offline] Failed to fetch transactions from server. Keeping cached data.');
+        set({ isLoading: false });
+      } else {
+        set({ error: err.message || 'Failed to fetch transactions', isLoading: false });
+      }
     }
   },
 
@@ -124,11 +141,13 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         set({ lastUsedIncomeCategory: newTx.category });
       }
 
-      // Add to list and refetch
-      set((state) => ({
-        transactions: [newTx, ...state.transactions].slice(0, 100),
+      // Add to list and cache
+      const updatedTxList = [newTx, ...get().transactions].slice(0, 100);
+      set({
+        transactions: updatedTxList,
         isLoading: false,
-      }));
+      });
+      await AsyncStorage.setItem('offline_transactions', JSON.stringify(updatedTxList));
 
       // Trigger stats refresh in background
       get().fetchKhataAccounts();
@@ -136,7 +155,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       return true;
     } catch (err: any) {
       // If network failure, perform offline fallback
-      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch')) {
+      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch') || err.message.includes('unreachable')) {
         console.log('[Offline] Add transaction failed due to network. Saving locally in offline queue.');
         
         // Calculate local paid/pending amounts
@@ -176,11 +195,16 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         // Queue action for syncing
         await queueOfflineAction('add_transaction', txWithRef, tempId);
 
-        // Instantly display to user
-        set((state) => ({
-          transactions: [localTx, ...state.transactions].slice(0, 100),
+        // Instantly display to user and cache
+        const updatedTxList = [localTx, ...get().transactions].slice(0, 100);
+        set({
+          transactions: updatedTxList,
           isLoading: false,
-        }));
+        });
+        await AsyncStorage.setItem('offline_transactions', JSON.stringify(updatedTxList));
+        
+        // Trigger stats refresh in background locally
+        get().fetchKhataAccounts();
         
         return true;
       }
@@ -207,31 +231,34 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       set({ isLoading: false });
       return true;
     } catch (err: any) {
-      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch')) {
+      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch') || err.message.includes('unreachable')) {
         console.log('[Offline] Record payment failed due to network. Saving locally in offline queue.');
         
         // Queue action for syncing
         await queueOfflineAction('record_payment', payWithRef);
 
         // Perform local update to the transaction record to show it as paid/partially paid instantly
-        set((state) => {
-          const txList = state.transactions.map((tx) => {
-            if (tx.id === paymentData.transaction_id) {
-              const newPaid = tx.paid_amount + paymentData.amount;
-              const newPending = tx.amount - newPaid;
-              const newStatus = newPending === 0 ? 'paid' : 'partially_paid';
-              return {
-                ...tx,
-                paid_amount: newPaid,
-                pending_amount: newPending,
-                status: newStatus as any,
-                updated_at: new Date().toISOString(),
-              };
-            }
-            return tx;
-          });
-          return { transactions: txList, isLoading: false };
+        const txList = get().transactions.map((tx) => {
+          if (tx.id === paymentData.transaction_id) {
+            const newPaid = tx.paid_amount + paymentData.amount;
+            const newPending = tx.amount - newPaid;
+            const newStatus = newPending === 0 ? 'paid' : 'partially_paid';
+            return {
+              ...tx,
+              paid_amount: newPaid,
+              pending_amount: newPending,
+              status: newStatus as any,
+              updated_at: new Date().toISOString(),
+            };
+          }
+          return tx;
         });
+        
+        set({ transactions: txList, isLoading: false });
+        await AsyncStorage.setItem('offline_transactions', JSON.stringify(txList));
+        
+        // Refresh Khata accounts locally to update outstanding calculation
+        get().fetchKhataAccounts();
         
         return true;
       }
@@ -242,29 +269,77 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   fetchKhataAccounts: async () => {
+    try {
+      const cached = await AsyncStorage.getItem('offline_khata_accounts');
+      if (cached && get().khataAccounts.length === 0) {
+        set({ khataAccounts: JSON.parse(cached) });
+      }
+    } catch (e) {
+      console.log('Error loading cached Khata accounts:', e);
+    }
+
     set({ isLoading: true, error: null });
     try {
       const data = await apiRequest('/api/khata');
       set({ khataAccounts: data, isLoading: false });
+      await AsyncStorage.setItem('offline_khata_accounts', JSON.stringify(data));
     } catch (err: any) {
-      set({ error: err.message || 'Failed to fetch Khata accounts', isLoading: false });
+      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch') || err.message.includes('unreachable')) {
+        console.log('[Offline] Failed to fetch Khata accounts from server. Keeping cached data.');
+        set({ isLoading: false });
+      } else {
+        set({ error: err.message || 'Failed to fetch Khata accounts', isLoading: false });
+      }
     }
   },
 
   createKhataAccount: async (name, description) => {
     set({ isLoading: true, error: null });
+    const clientRefId = `khata-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const khataWithRef = { name, description, client_ref_id: clientRefId };
+    
     try {
       const newAcc: KhataAccount = await apiRequest('/api/khata', {
         method: 'POST',
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify(khataWithRef),
       });
 
-      set((state) => ({
-        khataAccounts: [...state.khataAccounts, newAcc].sort((a, b) => a.name.localeCompare(b.name)),
+      const updatedAcc = [...get().khataAccounts, newAcc].sort((a, b) => a.name.localeCompare(b.name));
+      set({
+        khataAccounts: updatedAcc,
         isLoading: false,
-      }));
+      });
+      await AsyncStorage.setItem('offline_khata_accounts', JSON.stringify(updatedAcc));
       return true;
     } catch (err: any) {
+      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch') || err.message.includes('unreachable')) {
+        console.log('[Offline] Create Khata account failed due to network. Saving locally in offline queue.');
+        
+        const tempId = `temp-${clientRefId}`;
+        const localAcc: KhataAccount = {
+          id: tempId,
+          name,
+          description,
+          total_pending: 0,
+          total_paid: 0,
+          outstanding: 0,
+          created_at: new Date().toISOString(),
+        };
+
+        // Queue action for syncing
+        await queueOfflineAction('create_khata', khataWithRef, tempId);
+
+        // Instantly display to user
+        const updatedAcc = [...get().khataAccounts, localAcc].sort((a, b) => a.name.localeCompare(b.name));
+        set({
+          khataAccounts: updatedAcc,
+          isLoading: false,
+        });
+        await AsyncStorage.setItem('offline_khata_accounts', JSON.stringify(updatedAcc));
+        
+        return true;
+      }
+      
       set({ error: err.message || 'Failed to create Khata account', isLoading: false });
       return false;
     }
@@ -273,19 +348,41 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   deleteTransaction: async (id) => {
     set({ isLoading: true, error: null });
     try {
+      if (id.startsWith('temp-')) {
+        const updated = get().transactions.filter((tx) => tx.id !== id);
+        set({ transactions: updated, isLoading: false });
+        await AsyncStorage.setItem('offline_transactions', JSON.stringify(updated));
+        
+        const queueStr = await AsyncStorage.getItem('sync_queue');
+        if (queueStr) {
+          const queue = JSON.parse(queueStr);
+          const filteredQueue = queue.filter((item: any) => item.tempId !== id);
+          await AsyncStorage.setItem('sync_queue', JSON.stringify(filteredQueue));
+        }
+        return true;
+      }
+
       await apiRequest(`/api/transactions/${id}`, {
         method: 'DELETE',
       });
 
-      set((state) => ({
-        transactions: state.transactions.filter((tx) => tx.id !== id),
-        isLoading: false,
-      }));
+      const updated = get().transactions.filter((tx) => tx.id !== id);
+      set({ transactions: updated, isLoading: false });
+      await AsyncStorage.setItem('offline_transactions', JSON.stringify(updated));
       
-      // Refresh list and stats
       get().fetchKhataAccounts();
       return true;
     } catch (err: any) {
+      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch') || err.message.includes('unreachable')) {
+        await queueOfflineAction('delete_transaction', { id });
+        
+        const updated = get().transactions.filter((tx) => tx.id !== id);
+        set({ transactions: updated, isLoading: false });
+        await AsyncStorage.setItem('offline_transactions', JSON.stringify(updated));
+        
+        get().fetchKhataAccounts();
+        return true;
+      }
       set({ error: err.message || 'Failed to delete transaction', isLoading: false });
       return false;
     }
@@ -294,20 +391,165 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   deleteKhataAccount: async (id) => {
     set({ isLoading: true, error: null });
     try {
+      if (id.startsWith('temp-')) {
+        const updated = get().khataAccounts.filter((acc) => acc.id !== id);
+        set({ khataAccounts: updated, isLoading: false });
+        await AsyncStorage.setItem('offline_khata_accounts', JSON.stringify(updated));
+        
+        const queueStr = await AsyncStorage.getItem('sync_queue');
+        if (queueStr) {
+          const queue = JSON.parse(queueStr);
+          const filteredQueue = queue.filter((item: any) => item.tempId !== id);
+          await AsyncStorage.setItem('sync_queue', JSON.stringify(filteredQueue));
+        }
+        return true;
+      }
+
       await apiRequest(`/api/khata/${id}`, {
         method: 'DELETE',
       });
 
-      set((state) => ({
-        khataAccounts: state.khataAccounts.filter((acc) => acc.id !== id),
-        isLoading: false,
-      }));
+      const updated = get().khataAccounts.filter((acc) => acc.id !== id);
+      set({ khataAccounts: updated, isLoading: false });
+      await AsyncStorage.setItem('offline_khata_accounts', JSON.stringify(updated));
       
-      // Refresh transactions as they are unlinked
       get().fetchTransactions();
       return true;
     } catch (err: any) {
+      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch') || err.message.includes('unreachable')) {
+        await queueOfflineAction('delete_khata', { id });
+        
+        const updated = get().khataAccounts.filter((acc) => acc.id !== id);
+        set({ khataAccounts: updated, isLoading: false });
+        await AsyncStorage.setItem('offline_khata_accounts', JSON.stringify(updated));
+        
+        get().fetchTransactions();
+        return true;
+      }
       set({ error: err.message || 'Failed to delete Khata account', isLoading: false });
+      return false;
+    }
+  },
+
+  updateTransaction: async (id, updatedFields) => {
+    set({ isLoading: true, error: null });
+    try {
+      if (id.startsWith('temp-')) {
+        // If it is a temporary local item, we don't send API update yet. We update it in the offline queue instead.
+        const updatedList = get().transactions.map((t) => {
+          if (t.id === id) {
+            const updated = {
+              ...t,
+              ...updatedFields,
+              updated_at: new Date().toISOString(),
+            };
+            if (updatedFields.amount !== undefined || updatedFields.status !== undefined) {
+              const amt = updatedFields.amount !== undefined ? updatedFields.amount : t.amount;
+              const stat = updatedFields.status !== undefined ? updatedFields.status : t.status;
+              if (stat === 'paid') {
+                updated.paid_amount = amt;
+                updated.pending_amount = 0;
+              } else if (stat === 'pending') {
+                updated.paid_amount = 0;
+                updated.pending_amount = amt;
+              } else if (stat === 'partially_paid') {
+                const paid = updatedFields.paid_amount !== undefined ? updatedFields.paid_amount : t.paid_amount;
+                updated.paid_amount = paid;
+                updated.pending_amount = amt - paid;
+              }
+            }
+            return updated as Transaction;
+          }
+          return t;
+        });
+
+        set({
+          transactions: updatedList,
+          isLoading: false,
+        });
+        await AsyncStorage.setItem('offline_transactions', JSON.stringify(updatedList));
+
+        // Update the queued action
+        const queueStr = await AsyncStorage.getItem('sync_queue');
+        if (queueStr) {
+          const queue = JSON.parse(queueStr);
+          const updatedQueue = queue.map((item: any) => {
+            if (item.tempId === id && item.action === 'add_transaction') {
+              return {
+                ...item,
+                data: {
+                  ...item.data,
+                  ...updatedFields,
+                },
+              };
+            }
+            return item;
+          });
+          await AsyncStorage.setItem('sync_queue', JSON.stringify(updatedQueue));
+        }
+
+        get().fetchKhataAccounts();
+        return true;
+      }
+
+      const updatedTx = await apiRequest(`/api/transactions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updatedFields),
+      });
+
+      const updatedList = get().transactions.map((t) => (t.id === id ? updatedTx : t));
+      set({
+        transactions: updatedList,
+        isLoading: false,
+      });
+      await AsyncStorage.setItem('offline_transactions', JSON.stringify(updatedList));
+
+      get().fetchKhataAccounts();
+      return true;
+    } catch (err: any) {
+      if (err.message === 'Network request failed' || err.message.includes('Failed to fetch') || err.message.includes('unreachable')) {
+        console.log('[Offline] Update transaction failed due to network. Saving in offline queue.');
+
+        const updatedList = get().transactions.map((t) => {
+          if (t.id === id) {
+            const updated = {
+              ...t,
+              ...updatedFields,
+              updated_at: new Date().toISOString(),
+            };
+            if (updatedFields.amount !== undefined || updatedFields.status !== undefined) {
+              const amt = updatedFields.amount !== undefined ? updatedFields.amount : t.amount;
+              const stat = updatedFields.status !== undefined ? updatedFields.status : t.status;
+              if (stat === 'paid') {
+                updated.paid_amount = amt;
+                updated.pending_amount = 0;
+              } else if (stat === 'pending') {
+                updated.paid_amount = 0;
+                updated.pending_amount = amt;
+              } else if (stat === 'partially_paid') {
+                const paid = updatedFields.paid_amount !== undefined ? updatedFields.paid_amount : t.paid_amount;
+                updated.paid_amount = paid;
+                updated.pending_amount = amt - paid;
+              }
+            }
+            return updated as Transaction;
+          }
+          return t;
+        });
+
+        set({
+          transactions: updatedList,
+          isLoading: false,
+        });
+        await AsyncStorage.setItem('offline_transactions', JSON.stringify(updatedList));
+
+        await queueOfflineAction('update_transaction', { id, ...updatedFields });
+
+        get().fetchKhataAccounts();
+        return true;
+      }
+
+      set({ error: err.message || 'Failed to update transaction', isLoading: false });
       return false;
     }
   },
