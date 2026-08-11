@@ -33,33 +33,51 @@ const Tab = createBottomTabNavigator();
 function AppTabs() {
   const isDark = useIsDark();
   const insets = useSafeAreaInsets();
-  const bottomPadding = Math.max(insets.bottom, 8);
-  const tabHeight = 56 + bottomPadding;
+  const bottomPadding = Math.max(insets.bottom, 10);
+  const tabHeight = 58 + bottomPadding;
 
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: '#7c3aed',
-        tabBarInactiveTintColor: isDark ? '#9ca3af' : '#6b7280',
+        tabBarActiveTintColor: '#6C5CE7',
+        tabBarInactiveTintColor: isDark ? '#8E8EA0' : '#6E6E82',
         tabBarHideOnKeyboard: true,
-        tabBarStyle: [
-          tw`border-t border-gray-200 dark:border-gray-800`,
-          {
-            backgroundColor: isDark ? '#1f2937' : '#ffffff',
-            height: tabHeight,
-            paddingBottom: bottomPadding,
-            paddingTop: 6,
-          },
-        ],
-        tabBarLabelStyle: tw`text-[10px] font-semibold mt-0.5`,
-        headerStyle: [
-          tw`border-b border-gray-100 dark:border-gray-800`,
-          { backgroundColor: isDark ? '#1f2937' : '#ffffff' },
-        ],
-        headerTitleStyle: [
-          tw`font-bold text-lg`,
-          { color: isDark ? '#ffffff' : '#1f2937' },
-        ],
+        tabBarStyle: {
+          backgroundColor: isDark ? '#0B0B0F' : '#ffffff',
+          borderTopColor: isDark ? '#222232' : '#EBEBF2',
+          borderTopWidth: 1,
+          height: tabHeight,
+          paddingBottom: bottomPadding,
+          paddingTop: 8,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 4,
+        },
+        tabBarItemStyle: {
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingVertical: 2,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: 3,
+        },
+        headerStyle: {
+          backgroundColor: isDark ? '#0B0B0F' : '#ffffff',
+          borderBottomColor: isDark ? '#222232' : '#EBEBF2',
+          borderBottomWidth: 1,
+          elevation: 0,
+          shadowOpacity: 0,
+        },
+        headerTitleStyle: {
+          fontWeight: '700',
+          fontSize: 18,
+          color: isDark ? '#F7F7FA' : '#0B0B0F',
+        },
       }}
     >
       <Tab.Screen
@@ -68,7 +86,7 @@ function AppTabs() {
         options={{
           headerShown: false,
           tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size }) => <HomeIcon color={color} size={size - 2} />,
+          tabBarIcon: ({ color }) => <HomeIcon color={color} size={22} />,
         }}
       />
       <Tab.Screen
@@ -78,7 +96,7 @@ function AppTabs() {
           title: 'History',
           headerShown: false,
           tabBarLabel: 'History',
-          tabBarIcon: ({ color, size }) => <HistoryIcon color={color} size={size - 2} />,
+          tabBarIcon: ({ color }) => <HistoryIcon color={color} size={22} />,
         }}
       />
       <Tab.Screen
@@ -88,10 +106,9 @@ function AppTabs() {
           title: 'Khata',
           headerShown: false,
           tabBarLabel: 'Khata',
-          tabBarIcon: ({ color, size }) => <WalletIcon color={color} size={size - 2} />,
+          tabBarIcon: ({ color }) => <WalletIcon color={color} size={22} />,
         }}
       />
-
       <Tab.Screen
         name="Reports"
         component={ReportsScreen}
@@ -99,7 +116,7 @@ function AppTabs() {
           title: 'Analytics',
           headerShown: false,
           tabBarLabel: 'Analytics',
-          tabBarIcon: ({ color, size }) => <AnalyticsIcon color={color} size={size - 2} />,
+          tabBarIcon: ({ color }) => <AnalyticsIcon color={color} size={22} />,
         }}
       />
       <Tab.Screen
@@ -109,7 +126,7 @@ function AppTabs() {
           title: 'Settings',
           headerShown: false,
           tabBarLabel: 'Settings',
-          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size - 2} />,
+          tabBarIcon: ({ color }) => <SettingsIcon color={color} size={22} />,
         }}
       />
     </Tab.Navigator>

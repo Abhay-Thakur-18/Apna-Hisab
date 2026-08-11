@@ -407,17 +407,17 @@ export default function SettingsScreen({ navigation }: any) {
     (c) => c.name === category
   )?.subcategories || ['General'];
 
-  const bg = isDark ? '#111827' : '#f9fafb';
-  const cardBg = isDark ? '#1f2937' : '#ffffff';
-  const borderColor = isDark ? '#374151' : '#f3f4f6';
-  const textPrimary = isDark ? '#f9fafb' : '#1f2937';
-  const textMuted = isDark ? '#6b7280' : '#9ca3af';
+  const bg = isDark ? '#0B0B0F' : '#F7F7FA';
+  const cardBg = isDark ? '#161622' : '#ffffff';
+  const borderColor = isDark ? '#222232' : '#EBEBF2';
+  const textPrimary = isDark ? '#F7F7FA' : '#0B0B0F';
+  const textMuted = isDark ? '#9494A8' : '#6E6E82';
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: bg }]}>
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={isDark ? '#111827' : '#f9fafb'}
+        backgroundColor={cardBg}
       />
       
       <ScrollView contentContainerStyle={tw`p-6 pb-24`}>
@@ -426,14 +426,14 @@ export default function SettingsScreen({ navigation }: any) {
           style={[tw`border rounded-3xl p-6 shadow-sm mb-6 items-center`, { backgroundColor: cardBg, borderColor }]}
           onPress={() => navigation.navigate('Profile')}
         >
-          <View style={tw`w-20 h-20 bg-indigo-100 dark:bg-indigo-950 rounded-full justify-center items-center mb-4`}>
-            <Text style={tw`text-indigo-600 dark:text-indigo-400 text-3xl font-extrabold`}>
-              {user?.name?.charAt(0)?.toUpperCase() || 'A'}
+          <View style={tw`w-20 h-20 bg-[#6C5CE7]/15 rounded-full justify-center items-center mb-4 border border-[#6C5CE7]/30`}>
+            <Text style={tw`text-[#6C5CE7] text-3xl font-extrabold`}>
+              {user?.name && user.name !== 'Offline User' ? user.name.charAt(0).toUpperCase() : 'A'}
             </Text>
           </View>
-          <Text style={[tw`text-xl font-bold`, { color: textPrimary }]}>{user?.name || 'My Finances'}</Text>
-          <Text style={[tw`text-sm mt-1`, { color: textMuted }]}>{user?.email || 'Personal Finance Account'}</Text>
-          <Text style={tw`text-violet-600 dark:text-violet-400 text-xs font-bold mt-2`}>View & Edit Profile →</Text>
+          <Text style={[tw`text-xl font-extrabold`, { color: textPrimary }]}>{user?.name && user.name !== 'Offline User' ? user.name : 'Abhay'}</Text>
+          <Text style={[tw`text-xs mt-1 font-medium`, { color: textMuted }]}>{user?.email || 'Personal Finance Account'}</Text>
+          <Text style={tw`text-[#6C5CE7] text-xs font-bold mt-2.5`}>View & Edit Profile →</Text>
         </TouchableOpacity>
 
         {/* Settings options list */}
@@ -462,7 +462,7 @@ export default function SettingsScreen({ navigation }: any) {
               value={!!appPin}
               onValueChange={handleTogglePinLock}
               trackColor={{ false: '#d1d5db', true: '#c7d2fe' }}
-              thumbColor={appPin ? '#4f46e5' : '#f3f4f6'}
+              thumbColor={appPin ? '#6C5CE7' : '#f3f4f6'}
             />
           </View>
 
@@ -513,8 +513,8 @@ export default function SettingsScreen({ navigation }: any) {
                 style={[
                   tw`flex-1 py-3 rounded-xl items-center border-2`,
                   theme === t
-                    ? { borderColor: '#4f46e5', backgroundColor: isDark ? '#1e1b4b' : '#eef2ff' }
-                    : { borderColor: borderColor, backgroundColor: isDark ? '#374151' : '#f9fafb' },
+                    ? { borderColor: '#6C5CE7', backgroundColor: isDark ? '#1e1b4b' : '#EEEEFC' }
+                    : { borderColor: borderColor, backgroundColor: isDark ? '#11111A' : '#f9fafb' },
                 ]}
                 onPress={() => setTheme(t)}
               >
@@ -526,7 +526,7 @@ export default function SettingsScreen({ navigation }: any) {
                     fontSize: 11,
                     fontWeight: 'bold',
                     textTransform: 'capitalize',
-                    color: theme === t ? '#4f46e5' : textMuted,
+                    color: theme === t ? '#6C5CE7' : textMuted,
                   }}
                 >
                   {t}

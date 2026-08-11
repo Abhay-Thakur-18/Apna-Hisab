@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import tw from 'twrnc';
-import { Target, AlertTriangle, ChevronRight, Plus } from 'lucide-react-native';
+import { Target, AlertTriangle, ChevronRight, Plus, ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../store/authStore';
 import { useTransactionStore } from '../store/transactionStore';
 import { useBudgetStore } from '../store/budgetStore';
@@ -37,6 +38,7 @@ export default function HomeScreen({ navigation }: any) {
   const isDark = useIsDark();
   const insets = useSafeAreaInsets();
 
+  const [userName, setUserName] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [dueRecurring, setDueRecurring] = useState<any[]>([]);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
@@ -51,12 +53,28 @@ export default function HomeScreen({ navigation }: any) {
 
   const loadData = async () => {
     const todayStr = new Date().toISOString().split('T')[0];
+    const savedName = await AsyncStorage.getItem('user_name');
+    if (savedName) {
+      setUserName(savedName);
+    } else if (user?.name && user.name !== 'Offline User') {
+      setUserName(user.name);
+    } else {
+      setUserName('Abhay');
+    }
+
     await Promise.all([
       fetchTransactions(),
       fetchKhataAccounts(),
       loadBudget(),
       fetchDueRecurring(todayStr),
     ]);
+  };
+
+  const getTimeGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
   };
 
   const fetchDueRecurring = async (todayStr: string) => {
@@ -70,7 +88,15 @@ export default function HomeScreen({ navigation }: any) {
 
   useEffect(() => {
     loadData();
-  }, []);
+
+    // Listen to screen focus to reload name if changed in Profile
+    const unsubscribe = navigation.addListener('focus', () => {
+      AsyncStorage.getItem('user_name').then((n) => {
+        if (n) setUserName(n);
+      });
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   // Compute breakdown stats dynamically from single source of truth
   useEffect(() => {
@@ -164,13 +190,13 @@ export default function HomeScreen({ navigation }: any) {
   const budgetPercentage = monthlyBudget > 0 ? Math.min(Math.round((monthExpense / monthlyBudget) * 100), 100) : 0;
   const isBudgetExceeded = monthlyBudget > 0 && monthExpense > monthlyBudget;
 
-  const bg = isDark ? '#111827' : '#f9fafb';
-  const cardBg = isDark ? '#1f2937' : '#ffffff';
-  const borderColor = isDark ? '#374151' : '#f3f4f6';
-  const textPrimary = isDark ? '#f9fafb' : '#1f2937';
-  const textMuted = isDark ? '#6b7280' : '#9ca3af';
+  const bg = isDark ? '#0B0B0F' : '#F7F7FA';
+  const cardBg = isDark ? '#161622' : '#ffffff';
+  const borderColor = isDark ? '#222232' : '#EBEBF2';
+  const textPrimary = isDark ? '#F7F7FA' : '#0B0B0F';
+  const textMuted = isDark ? '#9494A8' : '#6E6E82';
 
-  const bottomFabPadding = 70 + Math.max(insets.bottom, 8);
+  const bottomFabPadding = 70 + Math.max(insets.bottom, 10);
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: bg }]}>
@@ -187,30 +213,34 @@ export default function HomeScreen({ navigation }: any) {
         ]}
       >
         <View>
-          <Text style={[tw`text-xs font-semibold uppercase tracking-wider`, { color: textMuted }]}>
-            Overview
+          <Text style={[tw`text-xs font-bold uppercase tracking-wider`, { color: textMuted }]}>
+            {getTimeGreeting()}
           </Text>
-          <Text style={[tw`text-xl font-bold`, { color: textPrimary }]}>
-            Your finances, simplified.
+          <Text style={[tw`text-2xl font-extrabold`, { color: textPrimary }]}>
+            {userName || 'Abhay'}
+          </Text>
+          <Text style={[tw`text-xs mt-0.5 font-medium`, { color: textMuted }]}>
+            Manage your money with confidence
           </Text>
         </View>
 
-        <View
+        <TouchableOpacity
           style={[
-            tw`border rounded-xl px-3 py-1.5`,
-            { backgroundColor: isDark ? '#312e81' : '#eef2ff', borderColor: isDark ? '#4338ca' : '#c7d2fe' },
+            tw`border rounded-2xl px-3 py-1.5 shadow-sm`,
+            { backgroundColor: isDark ? '#232042' : '#EEEEFC', borderColor: '#6C5CE7' },
           ]}
+          onPress={() => navigation.navigate('Profile')}
         >
-          <Text style={[tw`text-xs font-bold`, { color: isDark ? '#a5b4fc' : '#4338ca' }]}>
+          <Text style={tw`text-xs font-bold text-[#6C5CE7]`}>
             {getMonthName()}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
         contentContainerStyle={tw`p-6 pb-28`}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#7c3aed']} />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#6C5CE7']} />
         }
       >
         {/* Due Recurring Notifications Banner */}
@@ -227,33 +257,52 @@ export default function HomeScreen({ navigation }: any) {
                 Tap to review and approve (Rent, Tiffin, etc.)
               </Text>
             </View>
-            <View style={tw`bg-indigo-600 rounded-xl px-3.5 py-2`}>
+            <View style={tw`bg-[#6C5CE7] rounded-xl px-3.5 py-2`}>
               <Text style={tw`text-white text-xs font-bold`}>Review</Text>
             </View>
           </TouchableOpacity>
         )}
 
         {/* Main Dashboard Balance Card */}
-        <View style={tw`bg-violet-600 rounded-3xl p-6 shadow-lg mb-6`}>
+        <View style={tw`bg-[#6C5CE7] rounded-3xl p-6 shadow-xl mb-6`}>
           <Text style={tw`text-violet-200 text-xs font-semibold uppercase tracking-wider mb-1`}>
             Current Balance
           </Text>
-          <Text style={tw`text-white text-3xl font-extrabold`}>
+          <Text style={tw`text-white text-3.5xl font-black tracking-tight`}>
             {formatRupees(remainingBalance)}
           </Text>
 
-          <View style={tw`h-px bg-violet-500/50 my-4`} />
+          <View style={tw`h-px bg-white/20 my-4`} />
 
-          <View style={tw`flex-row justify-between`}>
+          <View style={tw`flex-row justify-between mb-4`}>
             <View style={tw`flex-1`}>
               <Text style={tw`text-violet-200 text-xs font-medium mb-0.5`}>Total Income</Text>
               <Text style={tw`text-white text-lg font-bold`}>{formatRupees(totalIncome)}</Text>
             </View>
-            <View style={tw`w-px bg-violet-500/50 mx-4`} />
+            <View style={tw`w-px bg-white/20 mx-4`} />
             <View style={tw`flex-1`}>
               <Text style={tw`text-violet-200 text-xs font-medium mb-0.5`}>Total Expenses</Text>
               <Text style={tw`text-white text-lg font-bold`}>{formatRupees(totalExpense)}</Text>
             </View>
+          </View>
+
+          {/* Quick Action Buttons */}
+          <View style={tw`flex-row gap-3 mt-1`}>
+            <TouchableOpacity
+              style={tw`flex-1 bg-emerald-500/25 border border-emerald-300/40 rounded-2xl py-3 items-center flex-row justify-center gap-1.5`}
+              onPress={() => navigation.navigate('AddTransaction', { initialType: 'income' })}
+            >
+              <ArrowDownLeft color="#ffffff" size={16} />
+              <Text style={tw`text-white font-bold text-xs`}>+ Quick Income</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={tw`flex-1 bg-rose-500/25 border border-rose-300/40 rounded-2xl py-3 items-center flex-row justify-center gap-1.5`}
+              onPress={() => navigation.navigate('AddTransaction', { initialType: 'expense' })}
+            >
+              <ArrowUpRight color="#ffffff" size={16} />
+              <Text style={tw`text-white font-bold text-xs`}>+ Quick Expense</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

@@ -103,8 +103,8 @@ export default function BudgetModal({ visible, onClose }: BudgetModalProps) {
 
   const handleDeleteBudget = (id: string, categoryName: string) => {
     Alert.alert(
-      'Delete Budget',
-      `Are you sure you want to delete the budget target for "${categoryName}"? Existing transactions will not be affected.`,
+      'Delete this budget?',
+      `Are you sure you want to delete the budget target for "${categoryName}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -151,7 +151,7 @@ export default function BudgetModal({ visible, onClose }: BudgetModalProps) {
             {/* Header Bar */}
             <View style={tw`flex-row justify-between items-center mb-5`}>
               <View style={tw`flex-row items-center gap-2`}>
-                <Target color="#7c3aed" size={24} />
+                <Target color="#6C5CE7" size={24} />
                 <Text style={[tw`text-lg font-bold`, { color: textPrimary }]}>
                   Budget Planner
                 </Text>
@@ -166,7 +166,7 @@ export default function BudgetModal({ visible, onClose }: BudgetModalProps) {
               <TouchableOpacity
                 style={[
                   tw`flex-1 py-2.5 rounded-xl items-center`,
-                  activeTab === 'overall' ? tw`bg-violet-600 shadow-sm` : {},
+                  activeTab === 'overall' ? tw`bg-[#6C5CE7] shadow-sm` : {},
                 ]}
                 onPress={() => setActiveTab('overall')}
               >
@@ -183,7 +183,7 @@ export default function BudgetModal({ visible, onClose }: BudgetModalProps) {
               <TouchableOpacity
                 style={[
                   tw`flex-1 py-2.5 rounded-xl items-center`,
-                  activeTab === 'category' ? tw`bg-violet-600 shadow-sm` : {},
+                  activeTab === 'category' ? tw`bg-[#6C5CE7] shadow-sm` : {},
                 ]}
                 onPress={() => setActiveTab('category')}
               >

@@ -21,7 +21,7 @@ import { useTransactionStore } from '../store/transactionStore';
 import { useIsDark } from '../store/themeStore';
 import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from '../utils/categories';
 import { rupeesToPaise } from '../utils/money';
-import { formatDateTime } from '../utils/date';
+import { formatDateTime, formatDate, formatTime } from '../utils/date';
 import DateTimePickerModal from '../components/DateTimePickerModal';
 import Toast from '../components/Toast';
 
@@ -49,8 +49,11 @@ export default function AddTransactionScreen({ route, navigation }: any) {
   const initialKhataType = route.params?.khataType || (editTx ? editTx.khata_type || 'udhar_diya' : 'udhar_diya');
   const isEditing = !!editTx;
 
+  const initialType = route.params?.initialType as 'expense' | 'income' | undefined;
   const [txType, setTxType] = useState<'expense' | 'income' | 'khata'>(
-    editTx ? (editTx.khata_id ? 'khata' : editTx.type) : (route.params?.khataId ? 'khata' : 'expense')
+    editTx
+      ? (editTx.khata_id ? 'khata' : editTx.type)
+      : (route.params?.khataId ? 'khata' : (initialType || 'expense'))
   );
   const [khataType, setKhataType] = useState<'udhar_diya' | 'udhar_liya'>(initialKhataType);
   const [amountStr, setAmountStr] = useState(
@@ -470,11 +473,11 @@ export default function AddTransactionScreen({ route, navigation }: any) {
               ]}
               onPress={() => setShowDatePicker(true)}
             >
-              <Calendar color="#7c3aed" size={20} />
+              <Calendar color="#6C5CE7" size={20} />
               <View>
                 <Text style={[tw`text-[10px] font-bold uppercase`, { color: textMuted }]}>Date</Text>
                 <Text style={[tw`text-xs font-bold mt-0.5`, { color: textPrimary }]}>
-                  {dateStr || 'Select Date'}
+                  {dateStr ? formatDate(dateStr) : 'Select Date'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -486,11 +489,11 @@ export default function AddTransactionScreen({ route, navigation }: any) {
               ]}
               onPress={() => setShowTimePicker(true)}
             >
-              <Clock color="#7c3aed" size={20} />
+              <Clock color="#6C5CE7" size={20} />
               <View>
                 <Text style={[tw`text-[10px] font-bold uppercase`, { color: textMuted }]}>Time</Text>
                 <Text style={[tw`text-xs font-bold mt-0.5`, { color: textPrimary }]}>
-                  {timeStr || 'Select Time'}
+                  {timeStr ? formatTime(timeStr) : 'Select Time'}
                 </Text>
               </View>
             </TouchableOpacity>

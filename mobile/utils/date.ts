@@ -37,6 +37,25 @@ export function formatDate(date: string): string {
 }
 
 /**
+ * Formats a time string (HH:MM:SS) into 12-hour format (e.g. "14:38:00" → "2:38 PM")
+ */
+export function formatTime(time?: string): string {
+  if (!time) return '';
+  try {
+    const [hStr, mStr] = time.split(':');
+    const hours = parseInt(hStr, 10);
+    const minutes = mStr || '00';
+    if (isNaN(hours)) return time;
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+    return `${hour12}:${minutes} ${period}`;
+  } catch {
+    return time;
+  }
+}
+
+
+/**
  * Returns today's date string in YYYY-MM-DD format.
  */
 export function todayDateStr(): string {

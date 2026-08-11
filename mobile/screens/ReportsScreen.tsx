@@ -24,11 +24,11 @@ export default function ReportsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Theme tokens
-  const bg = isDark ? '#111827' : '#f9fafb';
-  const cardBg = isDark ? '#1f2937' : '#ffffff';
-  const borderColor = isDark ? '#374151' : '#f3f4f6';
-  const textPrimary = isDark ? '#f9fafb' : '#1f2937';
-  const textMuted = isDark ? '#6b7280' : '#9ca3af';
+  const bg = isDark ? '#0B0B0F' : '#F7F7FA';
+  const cardBg = isDark ? '#161622' : '#ffffff';
+  const borderColor = isDark ? '#222232' : '#EBEBF2';
+  const textPrimary = isDark ? '#F7F7FA' : '#0B0B0F';
+  const textMuted = isDark ? '#9494A8' : '#6E6E82';
 
   // --------------- Compute date bounds ---------------
   const getDateRange = () => {
@@ -167,7 +167,7 @@ export default function ReportsScreen() {
               style={[
                 tw`border rounded-2xl px-4 py-2.5 mr-2.5 shadow-sm`,
                 period === p.id
-                  ? tw`bg-violet-600 border-violet-600`
+                  ? tw`bg-[#6C5CE7] border-[#6C5CE7]`
                   : { backgroundColor: cardBg, borderColor },
               ]}
               onPress={() => setPeriod(p.id as any)}

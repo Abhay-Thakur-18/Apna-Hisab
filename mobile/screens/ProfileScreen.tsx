@@ -23,13 +23,13 @@ export default function ProfileScreen({ navigation }: any) {
   const { theme, setTheme } = useThemeStore();
   const isDark = useIsDark();
 
-  const [name, setName] = useState(user?.name || 'Offline User');
+  const [name, setName] = useState(user?.name && user.name !== 'Offline User' ? user.name : 'Abhay');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
-    // Load local avatar preference
+    // Load local avatar & name preferences
     AsyncStorage.getItem('user_avatar').then((uri) => {
       if (uri) setAvatarUri(uri);
     });
@@ -37,6 +37,44 @@ export default function ProfileScreen({ navigation }: any) {
       if (n) setName(n);
     });
   }, []);
+
+  const handleSelectPhotoSource = () => {
+    Alert.alert(
+      'Profile Photo',
+      'Choose image source:',
+      [
+        { text: 'Take Photo (Camera)', onPress: handleTakeCameraPhoto },
+        { text: 'Choose from Gallery', onPress: handlePickAvatar },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleTakeCameraPhoto = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to take a profile picture.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        const uri = result.assets[0].uri;
+        setAvatarUri(uri);
+        await AsyncStorage.setItem('user_avatar', uri);
+        setToastMessage('Profile photo updated!');
+        setToastVisible(true);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to capture photo.');
+    }
+  };
 
   const handlePickAvatar = async () => {
     try {
@@ -72,11 +110,11 @@ export default function ProfileScreen({ navigation }: any) {
     setToastVisible(true);
   };
 
-  const bg = isDark ? '#111827' : '#f9fafb';
-  const cardBg = isDark ? '#1f2937' : '#ffffff';
-  const borderColor = isDark ? '#374151' : '#f3f4f6';
-  const textPrimary = isDark ? '#f9fafb' : '#1f2937';
-  const textMuted = isDark ? '#6b7280' : '#9ca3af';
+  const bg = isDark ? '#0B0B0F' : '#F7F7FA';
+  const cardBg = isDark ? '#161622' : '#ffffff';
+  const borderColor = isDark ? '#222232' : '#EBEBF2';
+  const textPrimary = isDark ? '#F7F7FA' : '#0B0B0F';
+  const textMuted = isDark ? '#9494A8' : '#6E6E82';
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: bg }]}>
@@ -91,14 +129,14 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={[tw`px-6 py-4 border-b flex-row justify-between items-center`, { backgroundColor: cardBg, borderColor }]}>
         <Text style={[tw`text-lg font-bold`, { color: textPrimary }]}>My Profile</Text>
         <TouchableOpacity onPress={handleSaveName}>
-          <Text style={tw`text-violet-600 dark:text-violet-400 font-bold text-sm`}>Save</Text>
+          <Text style={tw`text-[#6C5CE7] font-bold text-sm`}>Save</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={tw`p-6 pb-24`}>
         {/* User Avatar Card */}
         <View style={[tw`border rounded-3xl p-6 items-center shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
-          <TouchableOpacity onPress={handlePickAvatar} style={tw`relative mb-4`}>
+          <TouchableOpacity onPress={handleSelectPhotoSource} style={tw`relative mb-4`}>
             {avatarUri ? (
               <Image source={{ uri: avatarUri }} style={tw`w-24 h-24 rounded-full border-2 border-violet-600`} />
             ) : (

@@ -70,11 +70,11 @@ export default function PinUnlockScreen() {
     );
   };
 
-  const bg = isDark ? '#111827' : '#ffffff';
-  const textPrimary = isDark ? '#f9fafb' : '#1f2937';
-  const textMuted = isDark ? '#9ca3af' : '#6b7280';
-  const keyBg = isDark ? '#1f2937' : '#f9fafb';
-  const keyBorder = isDark ? '#374151' : '#f3f4f6';
+  const bg = isDark ? '#0B0B0F' : '#F7F7FA';
+  const textPrimary = isDark ? '#F7F7FA' : '#0B0B0F';
+  const textMuted = isDark ? '#9494A8' : '#6E6E82';
+  const keyBg = isDark ? '#161622' : '#ffffff';
+  const keyBorder = isDark ? '#222232' : '#EBEBF2';
 
   return (
     <SafeAreaView style={[tw`flex-1 justify-between py-10 px-6`, { backgroundColor: bg }]}>
@@ -85,13 +85,13 @@ export default function PinUnlockScreen() {
 
       {/* Header Branding */}
       <View style={tw`items-center mt-6`}>
-        <View style={tw`w-16 h-16 bg-indigo-600 rounded-3xl items-center justify-center mb-4 shadow-lg`}>
+        <View style={tw`w-16 h-16 bg-[#6C5CE7] rounded-3xl items-center justify-center mb-4 shadow-lg`}>
           <Lock color="#ffffff" size={30} />
         </View>
-        <Text style={[tw`text-2xl font-bold tracking-tight`, { color: textPrimary }]}>
+        <Text style={[tw`text-2xl font-extrabold tracking-tight`, { color: textPrimary }]}>
           Apna Hisab
         </Text>
-        <Text style={[tw`text-xs mt-1 font-medium`, { color: textMuted }]}>
+        <Text style={[tw`text-xs mt-1 font-semibold`, { color: textMuted }]}>
           Enter 4-digit PIN to unlock
         </Text>
 
@@ -110,8 +110,8 @@ export default function PinUnlockScreen() {
           <View
             key={index}
             style={[
-              tw`w-4 h-4 rounded-full border-2 border-indigo-600`,
-              pin.length > index ? { backgroundColor: '#4f46e5' } : { backgroundColor: 'transparent' },
+              tw`w-4 h-4 rounded-full border-2 border-[#6C5CE7]`,
+              pin.length > index ? { backgroundColor: '#6C5CE7' } : { backgroundColor: 'transparent' },
             ]}
           />
         ))}

@@ -17,7 +17,7 @@ import { Search, Filter, Trash2, Edit3, ChevronDown, ChevronUp, Tag } from 'luci
 import { useTransactionStore } from '../store/transactionStore';
 import { useIsDark } from '../store/themeStore';
 import { formatRupees } from '../utils/money';
-import { formatDateTime } from '../utils/date';
+import { formatDateTime, formatTime } from '../utils/date';
 import Toast from '../components/Toast';
 
 export default function TransactionsScreen({ route, navigation }: any) {
@@ -163,7 +163,11 @@ export default function TransactionsScreen({ route, navigation }: any) {
           </View>
 
           {/* Horizontal Filter Scroll Pill Bar */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={tw`flex-row pb-2`}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={tw`flex-row pr-6 py-1`}
+          >
             {[
               { id: 'all', label: 'All' },
               { id: 'income', label: 'Income' },
@@ -174,9 +178,9 @@ export default function TransactionsScreen({ route, navigation }: any) {
               <TouchableOpacity
                 key={f.id}
                 style={[
-                  tw`border rounded-2xl px-4 py-2 mr-2 shadow-sm`,
+                  tw`border rounded-2xl px-4 py-2.5 mr-2.5 shadow-sm`,
                   typeFilter === f.id
-                    ? tw`bg-violet-600 border-violet-600`
+                    ? tw`bg-[#6C5CE7] border-[#6C5CE7]`
                     : { backgroundColor: cardBg, borderColor },
                 ]}
                 onPress={() => setTypeFilter(f.id as any)}
@@ -267,7 +271,7 @@ export default function TransactionsScreen({ route, navigation }: any) {
                               )}
                             </View>
                             <Text style={{ color: textMuted, fontSize: 11, marginTop: 2 }}>
-                              {tx.time} • {tx.payment_method !== 'None' ? tx.payment_method : 'Pending Pay'}
+                              {tx.time ? formatTime(tx.time) : ''} • {tx.payment_method !== 'None' ? tx.payment_method : 'Pending Pay'}
                             </Text>
                             {tx.description ? (
                               <Text style={{ color: textMuted, fontSize: 11, fontStyle: 'italic', marginTop: 1 }}>
@@ -280,7 +284,7 @@ export default function TransactionsScreen({ route, navigation }: any) {
                             <Text
                               style={[
                                 tw`text-base font-black`,
-                                { color: tx.type === 'income' ? '#10b981' : textPrimary },
+                                { color: tx.type === 'income' ? '#10B981' : '#EF4444' },
                               ]}
                             >
                               {tx.type === 'income' ? '+' : '-'}
