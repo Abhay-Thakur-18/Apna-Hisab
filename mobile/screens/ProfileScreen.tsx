@@ -203,8 +203,8 @@ export default function ProfileScreen({ navigation }: any) {
           >
             <Download color="#7c3aed" size={20} />
             <View style={tw`flex-1`}>
-              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Backup & Statement Export</Text>
-              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Export CSV or JSON backup files</Text>
+              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Data & Privacy</Text>
+              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Download your data, manage privacy</Text>
             </View>
           </TouchableOpacity>
         </View>

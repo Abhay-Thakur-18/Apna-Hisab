@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,22 @@ import {
   Alert,
   StatusBar,
   Modal,
+  Animated,
+  Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
+import { Check, AlertCircle } from 'lucide-react-native';
 import { useAuthStore } from '../store/authStore';
 import { useTransactionStore } from '../store/transactionStore';
+import { useBudgetStore } from '../store/budgetStore';
 import { useThemeStore, useIsDark } from '../store/themeStore';
 import { API_URL, apiRequest, OFFLINE_ONLY } from '../services/api';
 import { formatRupees, rupeesToPaise } from '../utils/money';
 import { DEFAULT_EXPENSE_CATEGORIES } from '../utils/categories';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { documentDirectory, writeAsStringAsync } from 'expo-file-system/legacy';
+import { shareAsync } from 'expo-sharing';
 
 export default function SettingsScreen({ navigation }: any) {
   const { user, logout, appPin, setAppPin } = useAuthStore();
@@ -45,6 +51,55 @@ export default function SettingsScreen({ navigation }: any) {
   const [payMethod, setPayMethod] = useState('UPI');
   const [desc, setDesc] = useState('');
   const [startDate, setStartDate] = useState('');
+
+  // Download My Data - Export state
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Premium Material 3 Result Dialog State & Animations
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [resultModalType, setResultModalType] = useState<'success' | 'error'>('success');
+  const [resultModalMessage, setResultModalMessage] = useState('');
+  const resultScaleAnim = useRef(new Animated.Value(0.7)).current;
+  const resultOpacityAnim = useRef(new Animated.Value(0)).current;
+
+  const triggerResultModal = (type: 'success' | 'error', message: string) => {
+    setResultModalType(type);
+    setResultModalMessage(message);
+    setShowResultModal(true);
+    resultScaleAnim.setValue(0.7);
+    resultOpacityAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(resultOpacityAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.spring(resultScaleAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const dismissResultModal = () => {
+    try { Vibration.vibrate(40); } catch {}
+    Animated.parallel([
+      Animated.timing(resultOpacityAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(resultScaleAnim, {
+        toValue: 0.85,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowResultModal(false);
+    });
+  };
 
   // Fetch templates when modal opens
   const openRecurringManager = async () => {
@@ -177,6 +232,100 @@ export default function SettingsScreen({ navigation }: any) {
     );
   };
 
+  // Download My Data handler — exports real local data
+  const handleDownloadMyData = async () => {
+    setIsExporting(true);
+    try {
+      // Gather all real current data from stores and AsyncStorage
+      const txStore = useTransactionStore.getState();
+      const budgetState = useBudgetStore.getState();
+
+      // Profile data (exclude secrets)
+      const profileName = await AsyncStorage.getItem('profile_name');
+      const profilePhotoUri = await AsyncStorage.getItem('profile_photo');
+
+      // Theme preference
+      const themeMode = await AsyncStorage.getItem('theme_mode');
+
+      // Custom categories
+      const customCatsStr = await AsyncStorage.getItem('offline_custom_categories');
+      const customCategories = customCatsStr ? JSON.parse(customCatsStr) : [];
+
+      // Recurring templates
+      const recStr = await AsyncStorage.getItem('offline_recurring_templates');
+      const recurringTemplatesData = recStr ? JSON.parse(recStr) : [];
+
+      // Build clean export object
+      const exportData = {
+        app: {
+          name: 'Apna Hisab',
+          version: '1.7.0',
+          exportedAt: new Date().toISOString(),
+        },
+        profile: {
+          name: profileName || (user?.name !== 'Offline User' ? user?.name : null) || 'Abhay',
+          photoUri: profilePhotoUri || null,
+        },
+        transactions: txStore.transactions.map((tx) => ({
+          id: tx.id,
+          amount: tx.amount,
+          paid_amount: tx.paid_amount,
+          pending_amount: tx.pending_amount,
+          type: tx.type,
+          status: tx.status,
+          category: tx.category,
+          subcategory: tx.subcategory,
+          payment_method: tx.payment_method,
+          date: tx.date,
+          time: tx.time,
+          description: tx.description,
+          khata_id: tx.khata_id || null,
+          khata_type: tx.khata_type || null,
+          recurring_id: tx.recurring_id || null,
+          created_at: tx.created_at,
+          updated_at: tx.updated_at,
+        })),
+        khataAccounts: txStore.khataAccounts.map((acc) => ({
+          id: acc.id,
+          name: acc.name,
+          description: acc.description,
+          total_pending: acc.total_pending,
+          total_paid: acc.total_paid,
+          outstanding: acc.outstanding,
+          total_udhar_diya_pending: acc.total_udhar_diya_pending,
+          total_udhar_liya_pending: acc.total_udhar_liya_pending,
+          created_at: acc.created_at,
+        })),
+        budgets: budgetState.budgets.map((b) => ({
+          id: b.id,
+          month: b.month,
+          category: b.category,
+          amount: b.amount,
+          created_at: b.created_at,
+        })),
+        customCategories: customCategories,
+        recurringTemplates: recurringTemplatesData,
+        settings: {
+          theme: themeMode || 'light',
+        },
+      };
+
+      const json = JSON.stringify(exportData, null, 2);
+      const fileName = `apna_hisab_data_${new Date().toISOString().split('T')[0]}.json`;
+      const fileUri = `${documentDirectory}${fileName}`;
+      await writeAsStringAsync(fileUri, json);
+      await shareAsync(fileUri, {
+        mimeType: 'application/json',
+        dialogTitle: 'Save your Apna Hisab data',
+      });
+
+      setIsExporting(false);
+      triggerResultModal('success', 'Your data has been exported successfully.');
+    } catch (e: any) {
+      setIsExporting(false);
+      triggerResultModal('error', e.message || 'Failed to export your data. Please try again.');
+    }
+  };
 
 
   const handleTogglePinLock = () => {
@@ -305,6 +454,28 @@ export default function SettingsScreen({ navigation }: any) {
               </TouchableOpacity>
             ))}
           </View>
+        </View>
+
+        {/* Data & Privacy Card */}
+        <View style={[tw`border rounded-3xl overflow-hidden shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
+          <View style={[tw`px-5 py-3.5 border-b`, { borderColor }]}>
+            <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Data & Privacy</Text>
+          </View>
+          <TouchableOpacity
+            style={tw`flex-row justify-between items-center px-5 py-4`}
+            onPress={handleDownloadMyData}
+            disabled={isExporting}
+          >
+            <View style={tw`flex-1 mr-3`}>
+              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Download My Data</Text>
+              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Export a copy of your Apna Hisab data</Text>
+            </View>
+            {isExporting ? (
+              <ActivityIndicator size="small" color="#6C5CE7" />
+            ) : (
+              <Text style={{ color: textMuted, fontWeight: 'bold' }}>›</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Danger zone card */}
@@ -605,6 +776,56 @@ export default function SettingsScreen({ navigation }: any) {
           </View>
         </Modal>
       )}
+
+      {/* PREMIUM MATERIAL 3 RESULT DIALOG (Success / Error) */}
+      <Modal
+        visible={showResultModal}
+        transparent
+        animationType="none"
+        onRequestClose={dismissResultModal}
+      >
+        <Animated.View style={[tw`flex-1 justify-center items-center bg-black/50 px-6`, { opacity: resultOpacityAnim }]}>
+          <Animated.View
+            style={[
+              tw`rounded-[24px] p-6 w-[85%] max-w-sm items-center shadow-2xl`,
+              {
+                backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF',
+                transform: [{ scale: resultScaleAnim }],
+              },
+            ]}
+          >
+            {/* Icon */}
+            <View style={tw`w-16 h-16 ${resultModalType === 'success' ? 'bg-[#22C55E]/15' : 'bg-[#EF4444]/15'} rounded-full items-center justify-center mb-4 border ${resultModalType === 'success' ? 'border-[#22C55E]/30' : 'border-[#EF4444]/30'}`}>
+              <View style={tw`w-12 h-12 ${resultModalType === 'success' ? 'bg-[#22C55E]' : 'bg-[#EF4444]'} rounded-full items-center justify-center shadow-md`}>
+                {resultModalType === 'success' ? (
+                  <Check color="#FFFFFF" size={28} strokeWidth={3} />
+                ) : (
+                  <AlertCircle color="#FFFFFF" size={28} strokeWidth={2.5} />
+                )}
+              </View>
+            </View>
+
+            {/* Title */}
+            <Text style={[tw`text-[22px] font-bold text-center mb-1.5`, { color: isDark ? '#F7F7FA' : '#0B0B0F' }]}>
+              {resultModalType === 'success' ? 'Success' : 'Error'}
+            </Text>
+
+            {/* Message */}
+            <Text style={[tw`text-[16px] font-medium text-center mb-6 px-2`, { color: isDark ? '#9494A8' : '#6E6E82' }]}>
+              {resultModalMessage}
+            </Text>
+
+            {/* Continue Button */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={tw`w-full h-12 ${resultModalType === 'success' ? 'bg-[#22C55E]' : 'bg-[#EF4444]'} rounded-xl items-center justify-center shadow-md`}
+              onPress={dismissResultModal}
+            >
+              <Text style={tw`text-white font-bold text-[16px]`}>Continue</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
     </SafeAreaView>
   );
 }
