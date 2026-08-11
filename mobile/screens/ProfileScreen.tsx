@@ -180,7 +180,7 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
           <View style={tw`flex-row justify-between items-center py-2`}>
             <Text style={[tw`text-xs font-semibold`, { color: textPrimary }]}>App Version</Text>
-            <Text style={[tw`text-xs font-bold`, { color: textMuted }]}>v1.2.0 (Build 3)</Text>
+            <Text style={[tw`text-xs font-bold`, { color: textMuted }]}>v1.8.0 (Build 9)</Text>
           </View>
         </View>
 
