@@ -431,8 +431,8 @@ export default function SettingsScreen({ navigation }: any) {
               {user?.name?.charAt(0)?.toUpperCase() || 'A'}
             </Text>
           </View>
-          <Text style={[tw`text-xl font-bold`, { color: textPrimary }]}>{user?.name || 'Offline User'}</Text>
-          <Text style={[tw`text-sm mt-1`, { color: textMuted }]}>{user?.email || 'offline@local.app'}</Text>
+          <Text style={[tw`text-xl font-bold`, { color: textPrimary }]}>{user?.name || 'My Finances'}</Text>
+          <Text style={[tw`text-sm mt-1`, { color: textMuted }]}>{user?.email || 'Personal Finance Account'}</Text>
           <Text style={tw`text-violet-600 dark:text-violet-400 text-xs font-bold mt-2`}>View & Edit Profile →</Text>
         </TouchableOpacity>
 
@@ -548,15 +548,7 @@ export default function SettingsScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Logout */}
-        {!OFFLINE_ONLY && (
-          <TouchableOpacity 
-            style={tw`bg-gray-200 rounded-xl py-3.5 items-center justify-center mb-8`}
-            onPress={logout}
-          >
-            <Text style={tw`text-gray-700 font-bold text-base`}>Log Out</Text>
-          </TouchableOpacity>
-        )}
+
       </ScrollView>
 
       {/* RECURRING TRANSACTIONS MODAL */}

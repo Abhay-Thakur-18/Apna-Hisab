@@ -37,9 +37,18 @@ export interface KhataAccount {
   created_at: string;
 }
 
+export interface CustomCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color?: string;
+  type: 'income' | 'expense';
+}
+
 interface TransactionState {
   transactions: Transaction[];
   khataAccounts: KhataAccount[];
+  customCategories: CustomCategory[];
   isLoading: boolean;
   error: string | null;
 
@@ -48,6 +57,11 @@ interface TransactionState {
   lastUsedExpenseSubcategory: string | null;
   lastUsedPaymentMethod: string | null;
   lastUsedIncomeCategory: string | null;
+
+  // Single Source of Truth Selectors
+  getTotalIncome: () => number;
+  getTotalExpenses: () => number;
+  getCurrentBalance: () => number;
 
   fetchTransactions: () => Promise<void>;
   addTransaction: (txData: any) => Promise<boolean>;
@@ -58,6 +72,11 @@ interface TransactionState {
   deleteTransaction: (id: string) => Promise<boolean>;
   deleteKhataAccount: (id: string) => Promise<boolean>;
   loadLastUsedDefaults: () => Promise<void>;
+
+  // Custom Category Actions
+  loadCustomCategories: () => Promise<void>;
+  addCustomCategory: (cat: Omit<CustomCategory, 'id'>) => Promise<boolean>;
+  deleteCustomCategory: (id: string) => Promise<boolean>;
 }
 
 /**
@@ -97,6 +116,7 @@ function computeKhataMetrics(accounts: KhataAccount[], transactions: Transaction
 export const useTransactionStore = create<TransactionState>((set, get) => ({
   transactions: [],
   khataAccounts: [],
+  customCategories: [],
   isLoading: false,
   error: null,
 
@@ -104,6 +124,29 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   lastUsedExpenseSubcategory: null,
   lastUsedPaymentMethod: 'UPI',
   lastUsedIncomeCategory: null,
+
+  // Single Source of Truth Money Engine
+  getTotalIncome: () => {
+    return get().transactions.reduce((sum, tx) => {
+      if (tx.type === 'income') {
+        return sum + (tx.amount || 0);
+      }
+      return sum;
+    }, 0);
+  },
+
+  getTotalExpenses: () => {
+    return get().transactions.reduce((sum, tx) => {
+      if (tx.type === 'expense') {
+        return sum + (tx.paid_amount || tx.amount || 0);
+      }
+      return sum;
+    }, 0);
+  },
+
+  getCurrentBalance: () => {
+    return get().getTotalIncome() - get().getTotalExpenses();
+  },
 
   loadLastUsedDefaults: async () => {
     try {
@@ -123,8 +166,46 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     }
   },
 
+  loadCustomCategories: async () => {
+    try {
+      const stored = await AsyncStorage.getItem('offline_custom_categories');
+      if (stored) {
+        set({ customCategories: JSON.parse(stored) });
+      }
+    } catch (e) {
+      console.log('Error loading custom categories:', e);
+    }
+  },
+
+  addCustomCategory: async (catData) => {
+    try {
+      const newCat: CustomCategory = {
+        id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        ...catData,
+      };
+      const updated = [...get().customCategories, newCat];
+      set({ customCategories: updated });
+      await AsyncStorage.setItem('offline_custom_categories', JSON.stringify(updated));
+      return true;
+    } catch (e) {
+      console.error('Error adding custom category:', e);
+      return false;
+    }
+  },
+
+  deleteCustomCategory: async (id) => {
+    try {
+      const updated = get().customCategories.filter((c) => c.id !== id);
+      set({ customCategories: updated });
+      await AsyncStorage.setItem('offline_custom_categories', JSON.stringify(updated));
+      return true;
+    } catch (e) {
+      console.error('Error deleting custom category:', e);
+      return false;
+    }
+  },
+
   fetchTransactions: async () => {
-    // Load local cached transactions first
     try {
       const cached = await AsyncStorage.getItem('offline_transactions');
       if (cached) {
@@ -141,7 +222,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
 
     if (OFFLINE_ONLY) return;
 
-    // Background sync try
     try {
       const data = await apiRequest('/api/transactions?limit=100');
       if (Array.isArray(data)) {
@@ -158,7 +238,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   fetchKhataAccounts: async () => {
-    // Load cached Khata accounts first
     try {
       const cachedAccounts = await AsyncStorage.getItem('offline_khata_accounts');
       const accountsList: KhataAccount[] = cachedAccounts ? JSON.parse(cachedAccounts) : [];
@@ -223,14 +302,12 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         updated_at: new Date().toISOString(),
       };
 
-      // 1. Update Zustand transactions state immediately (newest first)
       const currentList = get().transactions.filter((t) => t.id !== txId);
       const updatedTxList = [localTx, ...currentList].sort((a, b) => {
         if (a.date !== b.date) return b.date.localeCompare(a.date);
         return b.time.localeCompare(a.time);
       });
 
-      // 2. Compute updated Khata account stats locally
       const updatedKhataAccounts = computeKhataMetrics(get().khataAccounts, updatedTxList);
 
       set({
@@ -240,11 +317,9 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         error: null,
       });
 
-      // 3. Save to AsyncStorage
       await AsyncStorage.setItem('offline_transactions', JSON.stringify(updatedTxList));
       await AsyncStorage.setItem('offline_khata_accounts', JSON.stringify(updatedKhataAccounts));
 
-      // Save user preferences
       if (localTx.type === 'expense') {
         await AsyncStorage.setItem('last_expense_cat', localTx.category);
         await AsyncStorage.setItem('last_expense_sub', localTx.subcategory);
@@ -261,7 +336,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         set({ lastUsedIncomeCategory: localTx.category });
       }
 
-      // 4. Queue action for background sync & trigger processSyncQueue
       await queueOfflineAction('add_transaction', localTx, txId);
       processSyncQueue().catch((e) => console.log('Background sync trigger:', e));
 
@@ -436,7 +510,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   deleteKhataAccount: async (id) => {
     try {
       const updatedAcc = get().khataAccounts.filter((acc) => acc.id !== id);
-      // Unlink transaction khata_id locally
       const updatedTx = get().transactions.map((t) => (t.khata_id === id ? { ...t, khata_id: null } : t));
 
       set({

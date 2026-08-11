@@ -1,15 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
+import Svg, { Rect, Path, Circle, Line, Text as SvgText, G, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { PieChart, TrendingUp, TrendingDown, Wallet, Tag, CreditCard } from 'lucide-react-native';
 import { useTransactionStore } from '../store/transactionStore';
 import { useIsDark } from '../store/themeStore';
 import { formatRupees } from '../utils/money';
@@ -20,7 +21,6 @@ export default function ReportsScreen() {
   const isDark = useIsDark();
 
   const [period, setPeriod] = useState<'today' | 'weekly' | 'monthly' | '6months' | 'yearly'>('monthly');
-  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   // Theme tokens
@@ -30,7 +30,7 @@ export default function ReportsScreen() {
   const textPrimary = isDark ? '#f9fafb' : '#1f2937';
   const textMuted = isDark ? '#6b7280' : '#9ca3af';
 
-  // --------------- Compute report directly from local store (offline-first) ---------------
+  // --------------- Compute date bounds ---------------
   const getDateRange = () => {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
@@ -73,8 +73,8 @@ export default function ReportsScreen() {
     if (tx.type === 'income') {
       totalIncome += tx.amount;
     } else {
-      totalExpense += tx.paid_amount;
-      totalPending += tx.pending_amount;
+      totalExpense += tx.paid_amount || tx.amount;
+      totalPending += tx.pending_amount || 0;
     }
   });
 
@@ -82,27 +82,33 @@ export default function ReportsScreen() {
 
   // Category breakdown
   const catMap: { [cat: string]: number } = {};
-  periodTxs.filter((tx) => tx.type === 'expense' && tx.paid_amount > 0).forEach((tx) => {
-    catMap[tx.category] = (catMap[tx.category] || 0) + tx.paid_amount;
-  });
+  periodTxs
+    .filter((tx) => tx.type === 'expense')
+    .forEach((tx) => {
+      const paid = tx.paid_amount || tx.amount;
+      if (paid > 0) {
+        catMap[tx.category] = (catMap[tx.category] || 0) + paid;
+      }
+    });
+
   const categoryBreakdown = Object.entries(catMap)
     .map(([category, amount]) => ({ category, amount }))
     .sort((a, b) => b.amount - a.amount);
 
   // Payment method breakdown
   const methodMap: { [m: string]: number } = {};
-  periodTxs.filter((tx) => tx.type === 'expense' && tx.paid_amount > 0 && tx.payment_method !== 'None').forEach((tx) => {
-    methodMap[tx.payment_method] = (methodMap[tx.payment_method] || 0) + tx.paid_amount;
-  });
+  periodTxs
+    .filter((tx) => tx.type === 'expense' && tx.payment_method !== 'None')
+    .forEach((tx) => {
+      const paid = tx.paid_amount || tx.amount;
+      if (paid > 0) {
+        methodMap[tx.payment_method] = (methodMap[tx.payment_method] || 0) + paid;
+      }
+    });
+
   const paymentBreakdown = Object.entries(methodMap)
     .map(([method, amount]) => ({ method, amount }))
     .sort((a, b) => b.amount - a.amount);
-
-  // Largest expenses
-  const largestExpenses = [...periodTxs]
-    .filter((tx) => tx.type === 'expense' && tx.paid_amount > 0)
-    .sort((a, b) => b.paid_amount - a.paid_amount)
-    .slice(0, 8);
 
   const getPercentage = (amount: number, total: number) => {
     if (total <= 0) return 0;
@@ -114,128 +120,214 @@ export default function ReportsScreen() {
     setTimeout(() => setRefreshing(false), 500);
   };
 
-  const periodLabels: { [k: string]: string } = {
-    today: 'Today',
-    weekly: 'Week',
-    monthly: 'Month',
-    '6months': '6 Months',
-    yearly: 'Year',
-  };
+  const categoryColors = [
+    '#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#8b5cf6', '#3b82f6'
+  ];
+
+  // Highest value for bar height calculations
+  const maxIncomeExpense = Math.max(totalIncome, totalExpense, 1);
+  const incomeBarHeight = Math.max(Math.round((totalIncome / maxIncomeExpense) * 120), 10);
+  const expenseBarHeight = Math.max(Math.round((totalExpense / maxIncomeExpense) * 120), 10);
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: bg }]}>
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={isDark ? '#1f2937' : '#ffffff'}
+        backgroundColor={cardBg}
       />
 
-      {/* Period Segment Selector */}
-      <View style={[tw`px-6 py-3 border-b flex-row gap-2`, { backgroundColor: cardBg, borderColor }]}>
-        {(['today', 'weekly', 'monthly', '6months', 'yearly'] as const).map((p) => (
-          <TouchableOpacity
-            key={p}
-            style={[
-              tw`flex-1 py-2 rounded-xl items-center`,
-              period === p
-                ? { backgroundColor: '#4f46e5' }
-                : { backgroundColor: isDark ? '#374151' : '#f3f4f6', borderWidth: 1, borderColor },
-            ]}
-            onPress={() => setPeriod(p)}
-          >
-            <Text
-              style={[
-                tw`text-[10px] font-bold`,
-                { color: period === p ? '#ffffff' : textMuted },
-              ]}
-            >
-              {periodLabels[p]}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Header Bar */}
+      <View
+        style={[
+          tw`px-6 py-4 border-b flex-row justify-between items-center`,
+          { backgroundColor: cardBg, borderColor },
+        ]}
+      >
+        <Text style={[tw`text-lg font-bold`, { color: textPrimary }]}>Financial Analytics</Text>
+        <PieChart color="#7c3aed" size={22} />
       </View>
 
       <ScrollView
-        contentContainerStyle={tw`p-6 pb-24`}
+        contentContainerStyle={tw`p-6 pb-28`}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#4f46e5']} />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#7c3aed']} />
         }
       >
-        {/* Summary Cards */}
-        <View style={[tw`border rounded-3xl p-5 shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
-          <Text style={[tw`font-bold text-sm mb-4`, { color: textPrimary }]}>
-            Period Summary — {periodLabels[period]}
+        {/* Horizontal Time Period Filter Bar */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={tw`flex-row mb-6`}>
+          {[
+            { id: 'today', label: 'Today' },
+            { id: 'weekly', label: '7 Days' },
+            { id: 'monthly', label: 'This Month' },
+            { id: '6months', label: '6 Months' },
+            { id: 'yearly', label: 'This Year' },
+          ].map((p) => (
+            <TouchableOpacity
+              key={p.id}
+              style={[
+                tw`border rounded-2xl px-4 py-2.5 mr-2.5 shadow-sm`,
+                period === p.id
+                  ? tw`bg-violet-600 border-violet-600`
+                  : { backgroundColor: cardBg, borderColor },
+              ]}
+              onPress={() => setPeriod(p.id as any)}
+            >
+              <Text
+                style={[
+                  tw`text-xs font-bold`,
+                  period === p.id ? tw`text-white` : { color: textPrimary },
+                ]}
+              >
+                {p.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Overview Financial Summary Cards */}
+        <View style={tw`flex-row gap-4 mb-6`}>
+          <View style={tw`flex-1 bg-emerald-600 rounded-3xl p-5 shadow-lg`}>
+            <View style={tw`flex-row items-center gap-1.5 mb-1`}>
+              <TrendingUp color="#ffffff" size={16} />
+              <Text style={tw`text-emerald-100 text-xs font-bold uppercase tracking-wider`}>
+                Income
+              </Text>
+            </View>
+            <Text style={tw`text-white text-xl font-extrabold`}>{formatRupees(totalIncome)}</Text>
+          </View>
+
+          <View style={tw`flex-1 bg-rose-600 rounded-3xl p-5 shadow-lg`}>
+            <View style={tw`flex-row items-center gap-1.5 mb-1`}>
+              <TrendingDown color="#ffffff" size={16} />
+              <Text style={tw`text-rose-100 text-xs font-bold uppercase tracking-wider`}>
+                Expense
+              </Text>
+            </View>
+            <Text style={tw`text-white text-xl font-extrabold`}>{formatRupees(totalExpense)}</Text>
+          </View>
+        </View>
+
+        {/* SVG CHART 1: Income vs Expense Comparison */}
+        <View style={[tw`border rounded-3xl p-6 shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
+          <Text style={[tw`text-sm font-bold mb-4`, { color: textPrimary }]}>
+            Income vs. Expense Comparison
           </Text>
 
-          <View style={tw`flex-row flex-wrap gap-4`}>
-            {/* Income */}
-            <View style={tw`flex-1 min-w-[45%] bg-emerald-50 rounded-2xl p-4 border border-emerald-100`}>
-              <Text style={tw`text-emerald-800 text-[10px] font-bold uppercase tracking-wider mb-1`}>
-                Total Income
-              </Text>
-              <Text style={tw`text-emerald-800 text-lg font-bold`}>
+          <View style={tw`items-center justify-center py-2`}>
+            <Svg height="160" width="280">
+              <Defs>
+                <LinearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#10b981" stopOpacity="1" />
+                  <Stop offset="1" stopColor="#059669" stopOpacity="0.8" />
+                </LinearGradient>
+                <LinearGradient id="expenseGrad" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#f43f5e" stopOpacity="1" />
+                  <Stop offset="1" stopColor="#e11d48" stopOpacity="0.8" />
+                </LinearGradient>
+              </Defs>
+
+              {/* Baseline */}
+              <Line x1="20" y1="140" x2="260" y2="140" stroke={isDark ? '#374151' : '#e5e7eb'} strokeWidth="2" />
+
+              {/* Income Bar */}
+              <Rect
+                x="65"
+                y={140 - incomeBarHeight}
+                width="45"
+                height={incomeBarHeight}
+                rx="8"
+                fill="url(#incomeGrad)"
+              />
+              <SvgText
+                x="87"
+                y={130 - incomeBarHeight}
+                fill={isDark ? '#a7f3d0' : '#047857'}
+                fontSize="11"
+                fontWeight="bold"
+                textAnchor="middle"
+              >
                 {formatRupees(totalIncome)}
-              </Text>
-            </View>
+              </SvgText>
 
-            {/* Expense */}
-            <View style={tw`flex-1 min-w-[45%] bg-red-50 rounded-2xl p-4 border border-red-100`}>
-              <Text style={tw`text-red-800 text-[10px] font-bold uppercase tracking-wider mb-1`}>
-                Total Spent
-              </Text>
-              <Text style={tw`text-red-800 text-lg font-bold`}>
+              {/* Expense Bar */}
+              <Rect
+                x="170"
+                y={140 - expenseBarHeight}
+                width="45"
+                height={expenseBarHeight}
+                rx="8"
+                fill="url(#expenseGrad)"
+              />
+              <SvgText
+                x="192"
+                y={130 - expenseBarHeight}
+                fill={isDark ? '#fecdd3' : '#be123c'}
+                fontSize="11"
+                fontWeight="bold"
+                textAnchor="middle"
+              >
                 {formatRupees(totalExpense)}
-              </Text>
-            </View>
+              </SvgText>
+            </Svg>
+          </View>
 
-            {/* Pending */}
-            <View style={tw`flex-1 min-w-[45%] bg-amber-50 rounded-2xl p-4 border border-amber-100`}>
-              <Text style={tw`text-amber-800 text-[10px] font-bold uppercase tracking-wider mb-1`}>
-                Pending Khata
-              </Text>
-              <Text style={tw`text-amber-800 text-lg font-bold`}>
-                {formatRupees(totalPending)}
-              </Text>
+          <View style={tw`flex-row justify-center gap-6 mt-2`}>
+            <View style={tw`flex-row items-center gap-2`}>
+              <View style={tw`w-3 h-3 rounded-full bg-emerald-500`} />
+              <Text style={[tw`text-xs font-semibold`, { color: textPrimary }]}>Income</Text>
             </View>
-
-            {/* Net Savings */}
-            <View style={tw`flex-1 min-w-[45%] bg-indigo-50 rounded-2xl p-4 border border-indigo-100`}>
-              <Text style={tw`text-indigo-800 text-[10px] font-bold uppercase tracking-wider mb-1`}>
-                Net Savings
-              </Text>
-              <Text style={tw`text-indigo-800 text-lg font-bold`}>
-                {formatRupees(netSavings)}
-              </Text>
+            <View style={tw`flex-row items-center gap-2`}>
+              <View style={tw`w-3 h-3 rounded-full bg-rose-500`} />
+              <Text style={[tw`text-xs font-semibold`, { color: textPrimary }]}>Expense</Text>
             </View>
           </View>
         </View>
 
-        {/* Category-wise Spending */}
-        <View style={[tw`border rounded-3xl p-5 shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
-          <Text style={[tw`font-bold text-sm mb-4`, { color: textPrimary }]}>
-            Category-wise Expenses
-          </Text>
+        {/* SVG CHART 2: Category Spending Breakdown */}
+        <View style={[tw`border rounded-3xl p-6 shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
+          <View style={tw`flex-row justify-between items-center mb-4`}>
+            <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>
+              Spending by Category
+            </Text>
+            <Tag color="#7c3aed" size={18} />
+          </View>
 
           {categoryBreakdown.length === 0 ? (
-            <Text style={[tw`text-xs italic text-center py-4`, { color: textMuted }]}>
-              No expenses recorded in this period.
-            </Text>
+            <View style={tw`py-6 items-center`}>
+              <Text style={[tw`text-xs font-semibold`, { color: textMuted }]}>
+                No category expenses recorded for this period
+              </Text>
+            </View>
           ) : (
-            categoryBreakdown.map((item) => {
+            categoryBreakdown.map((item, idx) => {
               const pct = getPercentage(item.amount, totalExpense);
+              const color = categoryColors[idx % categoryColors.length];
               return (
                 <View key={item.category} style={tw`mb-4`}>
                   <View style={tw`flex-row justify-between items-center mb-1.5`}>
-                    <Text style={[tw`text-xs font-semibold`, { color: textPrimary }]}>
-                      {item.category}
-                    </Text>
-                    <Text style={[tw`text-xs font-bold`, { color: textPrimary }]}>
-                      {formatRupees(item.amount)} ({pct}%)
-                    </Text>
+                    <View style={tw`flex-row items-center gap-2`}>
+                      <View style={[tw`w-3 h-3 rounded-full`, { backgroundColor: color }]} />
+                      <Text style={[tw`text-xs font-bold`, { color: textPrimary }]}>
+                        {item.category}
+                      </Text>
+                    </View>
+                    <View style={tw`flex-row items-center gap-2`}>
+                      <Text style={[tw`text-xs font-black`, { color: textPrimary }]}>
+                        {formatRupees(item.amount)}
+                      </Text>
+                      <Text style={tw`text-xs font-bold text-violet-600 dark:text-violet-400`}>
+                        {pct}%
+                      </Text>
+                    </View>
                   </View>
-                  {/* Progress Bar — use inline style for dynamic width (twrnc limitation) */}
-                  <View style={[tw`w-full h-2 rounded-full overflow-hidden`, { backgroundColor: isDark ? '#374151' : '#f3f4f6' }]}>
+
+                  {/* Horizontal SVG Progress Meter */}
+                  <View style={[tw`w-full h-3 rounded-full overflow-hidden`, { backgroundColor: isDark ? '#374151' : '#f3f4f6' }]}>
                     <View
-                      style={[tw`h-full bg-indigo-600 rounded-full`, { width: `${pct}%` }]}
+                      style={[
+                        tw`h-full rounded-full`,
+                        { width: `${pct}%`, backgroundColor: color },
+                      ]}
                     />
                   </View>
                 </View>
@@ -244,79 +336,38 @@ export default function ReportsScreen() {
           )}
         </View>
 
-        {/* Payment Method Breakdown */}
-        <View style={[tw`border rounded-3xl p-5 shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
-          <Text style={[tw`font-bold text-sm mb-4`, { color: textPrimary }]}>
-            Payment Method Breakdown
-          </Text>
+        {/* Payment Method Distribution */}
+        <View style={[tw`border rounded-3xl p-6 shadow-sm mb-6`, { backgroundColor: cardBg, borderColor }]}>
+          <View style={tw`flex-row justify-between items-center mb-4`}>
+            <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>
+              Payment Method Breakdown
+            </Text>
+            <CreditCard color="#7c3aed" size={18} />
+          </View>
 
           {paymentBreakdown.length === 0 ? (
-            <Text style={[tw`text-xs italic text-center py-4`, { color: textMuted }]}>
-              No transactions recorded in this period.
-            </Text>
+            <View style={tw`py-6 items-center`}>
+              <Text style={[tw`text-xs font-semibold`, { color: textMuted }]}>
+                No payment methods recorded for this period
+              </Text>
+            </View>
           ) : (
             paymentBreakdown.map((item) => {
               const pct = getPercentage(item.amount, totalExpense);
               return (
-                <View key={item.method} style={tw`mb-4`}>
-                  <View style={tw`flex-row justify-between items-center mb-1.5`}>
-                    <Text style={[tw`text-xs font-semibold`, { color: textPrimary }]}>
-                      {item.method}
+                <View style={tw`flex-row justify-between items-center py-2.5 border-b border-gray-100 dark:border-gray-800`} key={item.method}>
+                  <Text style={[tw`text-xs font-bold`, { color: textPrimary }]}>
+                    {item.method}
+                  </Text>
+                  <View style={tw`flex-row items-center gap-2`}>
+                    <Text style={[tw`text-xs font-black`, { color: textPrimary }]}>
+                      {formatRupees(item.amount)}
                     </Text>
-                    <Text style={[tw`text-xs font-bold`, { color: textPrimary }]}>
-                      {formatRupees(item.amount)} ({pct}%)
-                    </Text>
-                  </View>
-                  <View style={[tw`w-full h-2 rounded-full overflow-hidden`, { backgroundColor: isDark ? '#374151' : '#f3f4f6' }]}>
-                    <View
-                      style={[tw`h-full bg-emerald-600 rounded-full`, { width: `${pct}%` }]}
-                    />
+                    <Text style={[tw`text-xs font-bold`, { color: textMuted }]}>({pct}%)</Text>
                   </View>
                 </View>
               );
             })
-          )}
-        </View>
-
-        {/* Largest Expenses */}
-        <View style={[tw`border rounded-3xl p-5 shadow-sm`, { backgroundColor: cardBg, borderColor }]}>
-          <Text style={[tw`font-bold text-sm mb-4`, { color: textPrimary }]}>
-            Largest Expenses
-          </Text>
-
-          {largestExpenses.length === 0 ? (
-            <Text style={[tw`text-xs italic text-center py-4`, { color: textMuted }]}>
-              No expenses recorded in this period.
-            </Text>
-          ) : (
-            largestExpenses.map((tx, idx) => (
-              <View
-                key={tx.id}
-                style={[
-                  tw`flex-row justify-between items-center py-3.5`,
-                  idx < largestExpenses.length - 1
-                    ? { borderBottomWidth: 1, borderColor }
-                    : {},
-                ]}
-              >
-                <View style={tw`flex-1 mr-3`}>
-                  <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>
-                    {tx.category} → {tx.subcategory}
-                  </Text>
-                  <Text style={[tw`text-xs mt-1`, { color: textMuted }]}>
-                    {formatDateTime(tx.date, tx.time)}
-                  </Text>
-                  {tx.description ? (
-                    <Text style={[tw`text-xs italic mt-0.5`, { color: textMuted }]}>
-                      "{tx.description}"
-                    </Text>
-                  ) : null}
-                </View>
-                <Text style={[tw`text-base font-extrabold`, { color: textPrimary }]}>
-                  {formatRupees(tx.paid_amount || tx.amount)}
-                </Text>
-              </View>
-            ))
           )}
         </View>
       </ScrollView>

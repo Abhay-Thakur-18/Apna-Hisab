@@ -8,7 +8,7 @@ interface DateTimePickerModalProps {
   visible: boolean;
   mode: 'date' | 'time';
   value: Date;
-  onChange: (event: DateTimePickerEvent, selectedDate?: Date) => void;
+  onChange?: (event: DateTimePickerEvent, selectedDate?: Date) => void;
   onConfirm: (date: Date) => void;
   onCancel: () => void;
   title?: string;

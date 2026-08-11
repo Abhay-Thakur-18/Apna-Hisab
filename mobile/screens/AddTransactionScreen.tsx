@@ -11,12 +11,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
-import { Camera, Image as ImageIcon, Calendar, Clock, X } from 'lucide-react-native';
+import { Camera, Image as ImageIcon, Calendar, Clock, X, Plus, Tag } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useTransactionStore } from '../store/transactionStore';
 import { useIsDark } from '../store/themeStore';
 import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from '../utils/categories';
@@ -36,6 +36,9 @@ export default function AddTransactionScreen({ route, navigation }: any) {
     lastUsedPaymentMethod,
     lastUsedIncomeCategory,
     loadLastUsedDefaults,
+    customCategories,
+    loadCustomCategories,
+    addCustomCategory,
     isLoading,
   } = useTransactionStore();
 
@@ -71,12 +74,20 @@ export default function AddTransactionScreen({ route, navigation }: any) {
   // Photo / Receipt state
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
 
+  // Custom Category Modal State
+  const [showAddCatModal, setShowAddCatModal] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+
   // Toast feedback
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
-  // Initialize date/time on mount
+  // Initialize date/time & custom categories on mount
   useEffect(() => {
+    loadCustomCategories();
+    loadLastUsedDefaults();
+    fetchKhataAccounts();
+
     const now = new Date();
     if (isEditing && editTx?.date) {
       try {
@@ -99,94 +110,50 @@ export default function AddTransactionScreen({ route, navigation }: any) {
       setTimeStr(`${hh}:${min}:${ss}`);
       setPickerDate(now);
     }
-
-    fetchKhataAccounts();
-    loadLastUsedDefaults();
   }, []);
 
-  // Pre-populate defaults when store variables load or type changes
+  // Set category defaults when type changes
   useEffect(() => {
     if (isEditing) return;
+
     if (txType === 'expense') {
-      setCategory(lastUsedExpenseCategory || DEFAULT_EXPENSE_CATEGORIES[0].name);
-      setSubcategory(lastUsedExpenseSubcategory || DEFAULT_EXPENSE_CATEGORIES[0].subcategories[0]);
+      const defCat = lastUsedExpenseCategory || DEFAULT_EXPENSE_CATEGORIES[0].name;
+      setCategory(defCat);
+
+      const found = DEFAULT_EXPENSE_CATEGORIES.find((c) => c.name === defCat);
+      const defSub = lastUsedExpenseSubcategory || (found?.subcategories[0] || 'General');
+      setSubcategory(defSub);
       setPaymentMethod(lastUsedPaymentMethod || 'UPI');
     } else if (txType === 'income') {
-      setCategory(lastUsedIncomeCategory || DEFAULT_INCOME_CATEGORIES[0]);
+      const defInc = lastUsedIncomeCategory || DEFAULT_INCOME_CATEGORIES[0];
+      setCategory(defInc);
       setSubcategory('General');
-      setPaymentMethod('None');
+      setPaymentMethod(lastUsedPaymentMethod || 'UPI');
+    } else if (txType === 'khata') {
+      const catName = khataType === 'udhar_diya' ? 'Udhar Diya' : 'Udhar Liya';
+      setCategory(catName);
+      setSubcategory(khataType === 'udhar_diya' ? 'Money Given' : 'Money Borrowed');
+      setPaymentMethod('UPI');
+    }
+  }, [txType, khataType]);
+
+  // Update subcategory options when category changes
+  const handleCategorySelect = (catName: string) => {
+    setCategory(catName);
+    const found = DEFAULT_EXPENSE_CATEGORIES.find((c) => c.name === catName);
+    if (found && found.subcategories.length > 0) {
+      setSubcategory(found.subcategories[0]);
     } else {
-      setCategory(lastUsedExpenseCategory || DEFAULT_EXPENSE_CATEGORIES[0].name);
-      setSubcategory(lastUsedExpenseSubcategory || DEFAULT_EXPENSE_CATEGORIES[0].subcategories[0]);
-      setPaymentMethod('None');
-      if (khataAccounts.length > 0 && !selectedKhataId) {
-        setSelectedKhataId(khataAccounts[0].id);
-      }
-    }
-  }, [txType, lastUsedExpenseCategory, lastUsedExpenseSubcategory, lastUsedPaymentMethod, lastUsedIncomeCategory]);
-
-  const activeSubcategories = DEFAULT_EXPENSE_CATEGORIES.find(
-    (c) => c.name === category
-  )?.subcategories || ['General'];
-
-  // Handle Date picker selection
-  const handleDateConfirm = (selectedDate: Date) => {
-    setShowDatePicker(false);
-    const yyyy = selectedDate.getFullYear();
-    const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const dd = String(selectedDate.getDate()).padStart(2, '0');
-
-    setDateStr(`${yyyy}-${mm}-${dd}`);
-
-    // Preserve existing time
-    const updated = new Date(selectedDate);
-    const [hh, min, ss] = timeStr.split(':').map(Number);
-    if (!isNaN(hh)) updated.setHours(hh, min || 0, ss || 0);
-    setPickerDate(updated);
-  };
-
-  // Handle Time picker selection
-  const handleTimeConfirm = (selectedTime: Date) => {
-    setShowTimePicker(false);
-    const hh = String(selectedTime.getHours()).padStart(2, '0');
-    const min = String(selectedTime.getMinutes()).padStart(2, '0');
-    const ss = String(selectedTime.getSeconds()).padStart(2, '0');
-
-    setTimeStr(`${hh}:${min}:${ss}`);
-
-    const updated = new Date(pickerDate);
-    updated.setHours(selectedTime.getHours(), selectedTime.getMinutes(), selectedTime.getSeconds());
-    setPickerDate(updated);
-  };
-
-  // Image Picker — Camera
-  const handleTakePhoto = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Needed', 'Camera permission is required to capture receipt images.');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: 0.7,
-      });
-
-      if (!result.canceled && result.assets?.[0]?.uri) {
-        setReceiptUri(result.assets[0].uri);
-      }
-    } catch (e: any) {
-      Alert.alert('Camera Error', e.message || 'Could not launch camera.');
+      setSubcategory('General');
     }
   };
 
-  // Image Picker — Gallery
-  const handlePickGallery = async () => {
+  // Image Pickers
+  const handlePickImage = async () => {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert('Permission Needed', 'Photo gallery permission is required to select receipt images.');
+        Alert.alert('Permission Required', 'Photo library permission is required to attach receipt images.');
         return;
       }
 
@@ -200,49 +167,92 @@ export default function AddTransactionScreen({ route, navigation }: any) {
         setReceiptUri(result.assets[0].uri);
       }
     } catch (e: any) {
-      Alert.alert('Gallery Error', e.message || 'Could not launch photo gallery.');
+      Alert.alert('Error', e.message || 'Failed to select image.');
     }
   };
 
+  const handleTakeCamera = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to capture receipt images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setReceiptUri(result.assets[0].uri);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to take photo.');
+    }
+  };
+
+  const handleAddCustomCat = async () => {
+    if (!newCatName.trim()) {
+      Alert.alert('Required', 'Please enter a category name.');
+      return;
+    }
+    const catType = txType === 'income' ? 'income' : 'expense';
+    const success = await addCustomCategory({
+      name: newCatName.trim(),
+      icon: 'Tag',
+      type: catType,
+    });
+    if (success) {
+      setCategory(newCatName.trim());
+      setSubcategory('General');
+      setNewCatName('');
+      setShowAddCatModal(false);
+      setToastMessage(`Custom category "${newCatName.trim()}" created!`);
+      setToastVisible(true);
+    }
+  };
+
+  // Form Submission
   const handleSubmit = async () => {
-    const amountVal = parseFloat(amountStr);
-    if (!amountStr || isNaN(amountVal) || amountVal <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid monetary amount.');
+    const amt = parseFloat(amountStr);
+    if (isNaN(amt) || amt <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid positive number for amount.');
+      return;
+    }
+
+    if (!category) {
+      Alert.alert('Category Required', 'Please select or add a category.');
       return;
     }
 
     if (txType === 'khata' && !selectedKhataId) {
-      Alert.alert('Select Khata Account', 'Please select a person/supplier for this entry.');
+      Alert.alert('Khata Account Required', 'Please select a Khata customer/vendor account.');
       return;
     }
 
-    const paise = rupeesToPaise(amountVal);
-    const isExpenseType = txType === 'khata' ? (khataType === 'udhar_diya') : (txType === 'expense');
+    const amountPaise = rupeesToPaise(amt);
+    const backendType = txType === 'khata' ? (khataType === 'udhar_diya' ? 'expense' : 'income') : txType;
 
-    let txData: any = {
-      amount: paise,
-      type: isExpenseType ? 'expense' : 'income',
-      status: txType === 'khata' ? 'pending' : (editTx ? editTx.status : 'paid'),
+    const payload: any = {
+      amount: amountPaise,
+      type: backendType,
       category,
-      subcategory: txType === 'income' ? 'General' : subcategory,
-      payment_method: txType === 'khata' ? 'None' : paymentMethod,
+      subcategory: subcategory || 'General',
+      payment_method: paymentMethod,
       date: dateStr,
       time: timeStr,
       description,
+      khata_id: txType === 'khata' ? selectedKhataId : null,
       khata_type: txType === 'khata' ? khataType : null,
+      status: 'paid',
     };
 
-    if (txType === 'khata') {
-      txData.khata_id = selectedKhataId;
-    } else {
-      txData.khata_id = null;
-    }
-
     let success = false;
-    if (isEditing) {
-      success = await updateTransaction(editTx.id, txData);
+    if (isEditing && editTx) {
+      success = await updateTransaction(editTx.id, payload);
     } else {
-      success = await addTransaction(txData);
+      success = await addTransaction(payload);
     }
 
     if (success) {
@@ -250,11 +260,17 @@ export default function AddTransactionScreen({ route, navigation }: any) {
       setToastVisible(true);
       setTimeout(() => {
         navigation.goBack();
-      }, 1000);
+      }, 700);
     } else {
-      Alert.alert('Error', 'Failed to save transaction locally.');
+      Alert.alert('Error', 'Failed to save transaction. Please try again.');
     }
   };
+
+  const activeSubcategories =
+    DEFAULT_EXPENSE_CATEGORIES.find((c) => c.name === category)?.subcategories || ['General'];
+
+  const customExpenseCats = customCategories.filter((c) => c.type === 'expense');
+  const customIncomeCats = customCategories.filter((c) => c.type === 'income');
 
   const bg = isDark ? '#111827' : '#f9fafb';
   const cardBg = isDark ? '#1f2937' : '#ffffff';
@@ -266,374 +282,394 @@ export default function AddTransactionScreen({ route, navigation }: any) {
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: bg }]}>
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={isDark ? '#1f2937' : '#f9fafb'}
+        backgroundColor={cardBg}
       />
 
       <Toast visible={toastVisible} message={toastMessage} type="success" />
 
-      {/* Top Bar */}
-      <View style={[tw`flex-row items-center justify-between px-6 py-4 border-b`, { backgroundColor: cardBg, borderColor }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={tw`text-indigo-500 text-sm font-semibold`}>Cancel</Text>
-        </TouchableOpacity>
+      {/* Header */}
+      <View
+        style={[
+          tw`px-6 py-4 border-b flex-row justify-between items-center`,
+          { backgroundColor: cardBg, borderColor },
+        ]}
+      >
         <Text style={[tw`text-lg font-bold`, { color: textPrimary }]}>
-          {isEditing ? 'Edit Entry' : 'Record Entry'}
+          {isEditing ? 'Edit Transaction' : 'Record Transaction'}
         </Text>
-        <View style={tw`w-10`} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={tw`p-1`}>
+          <X color={textMuted} size={24} />
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={tw`flex-1`}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
-        <ScrollView contentContainerStyle={tw`p-6 pb-16`} keyboardShouldPersistTaps="handled">
-          {/* Transaction Type Segment Selector */}
-          <View style={[tw`flex-row rounded-xl p-1 mb-6`, { backgroundColor: isDark ? '#374151' : '#e5e7eb' }]}>
-            {(['expense', 'income', 'khata'] as const).map((type) => (
-              <TouchableOpacity
-                key={type}
+        <ScrollView
+          contentContainerStyle={tw`p-6 pb-28`}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Type Selector Pills */}
+          <View style={tw`flex-row bg-gray-200 dark:bg-gray-800 p-1.5 rounded-2xl mb-6`}>
+            <TouchableOpacity
+              style={[
+                tw`flex-1 py-2.5 rounded-xl items-center`,
+                txType === 'expense' ? tw`bg-rose-600 shadow-sm` : {},
+              ]}
+              onPress={() => setTxType('expense')}
+            >
+              <Text
                 style={[
-                  tw`flex-1 py-2.5 rounded-lg items-center`,
-                  txType === type ? { backgroundColor: cardBg } : {},
+                  tw`text-xs font-bold`,
+                  txType === 'expense' ? tw`text-white` : { color: textMuted },
                 ]}
-                onPress={() => setTxType(type)}
               >
-                <Text
-                  style={[
-                    tw`text-sm font-bold capitalize`,
-                    { color: txType === type ? textPrimary : textMuted },
-                  ]}
-                >
-                  {type === 'khata' ? 'Khata (Pending)' : type}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                Expense
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                tw`flex-1 py-2.5 rounded-xl items-center`,
+                txType === 'income' ? tw`bg-emerald-600 shadow-sm` : {},
+              ]}
+              onPress={() => setTxType('income')}
+            >
+              <Text
+                style={[
+                  tw`text-xs font-bold`,
+                  txType === 'income' ? tw`text-white` : { color: textMuted },
+                ]}
+              >
+                Income
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                tw`flex-1 py-2.5 rounded-xl items-center`,
+                txType === 'khata' ? tw`bg-violet-600 shadow-sm` : {},
+              ]}
+              onPress={() => setTxType('khata')}
+            >
+              <Text
+                style={[
+                  tw`text-xs font-bold`,
+                  txType === 'khata' ? tw`text-white` : { color: textMuted },
+                ]}
+              >
+                Khata
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Amount Card */}
-          <View style={[tw`rounded-2xl p-6 shadow-sm border mb-6`, { backgroundColor: cardBg, borderColor }]}>
-            <View style={tw`items-center mb-4`}>
-              <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
-                Amount (Rupees)
+          {/* Khata Sub-Type Selector */}
+          {txType === 'khata' && (
+            <View style={tw`mb-6`}>
+              <Text style={[tw`text-xs font-semibold mb-2 uppercase tracking-wider`, { color: textMuted }]}>
+                Khata Record Type
               </Text>
-              <View style={tw`flex-row items-center`}>
-                <Text style={[tw`text-3xl font-bold mr-1`, { color: textPrimary }]}>₹</Text>
-                <TextInput
+              <View style={tw`flex-row gap-3`}>
+                <TouchableOpacity
                   style={[
-                    tw`text-3xl font-bold w-48 text-center pb-1 border-b`,
-                    { color: textPrimary, borderColor: isDark ? '#4b5563' : '#e5e7eb' },
+                    tw`flex-1 py-3 border rounded-2xl items-center`,
+                    khataType === 'udhar_diya'
+                      ? tw`bg-emerald-500/10 border-emerald-500`
+                      : { backgroundColor: cardBg, borderColor },
                   ]}
-                  placeholder="0.00"
-                  placeholderTextColor={textMuted}
-                  keyboardType="numeric"
-                  value={amountStr}
-                  onChangeText={setAmountStr}
-                  autoFocus
-                />
+                  onPress={() => setKhataType('udhar_diya')}
+                >
+                  <Text style={tw`text-xs font-bold text-emerald-600 dark:text-emerald-400`}>
+                    Udhar Diya (Given)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    tw`flex-1 py-3 border rounded-2xl items-center`,
+                    khataType === 'udhar_liya'
+                      ? tw`bg-amber-500/10 border-amber-500`
+                      : { backgroundColor: cardBg, borderColor },
+                  ]}
+                  onPress={() => setKhataType('udhar_liya')}
+                >
+                  <Text style={tw`text-xs font-bold text-amber-600 dark:text-amber-400`}>
+                    Udhar Liya (Borrowed)
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </View>
 
-            {/* Dynamic Khata Selector & Udhar Diya/Liya option */}
-            {txType === 'khata' && (
-              <View style={tw`mb-4`}>
-                <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
-                  Khata Entry Type
-                </Text>
-                <View style={tw`flex-row gap-2 mb-4`}>
-                  <TouchableOpacity
-                    style={[
-                      tw`flex-1 border rounded-xl py-2.5 items-center`,
-                      khataType === 'udhar_diya'
-                        ? { borderColor: '#10b981', backgroundColor: isDark ? '#064e3b' : '#ecfdf5' }
-                        : { borderColor: isDark ? '#4b5563' : '#e5e7eb', backgroundColor: isDark ? '#374151' : '#f9fafb' },
-                    ]}
-                    onPress={() => setKhataType('udhar_diya')}
-                  >
-                    <Text style={[tw`text-xs font-bold`, { color: khataType === 'udhar_diya' ? '#10b981' : textMuted }]}>
-                      Udhar Diya (I Gave)
-                    </Text>
-                    <Text style={[tw`text-[10px] mt-0.5`, { color: textMuted }]}>Receivable</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      tw`flex-1 border rounded-xl py-2.5 items-center`,
-                      khataType === 'udhar_liya'
-                        ? { borderColor: '#f59e0b', backgroundColor: isDark ? '#78350f' : '#fffbeb' }
-                        : { borderColor: isDark ? '#4b5563' : '#e5e7eb', backgroundColor: isDark ? '#374151' : '#f9fafb' },
-                    ]}
-                    onPress={() => setKhataType('udhar_liya')}
-                  >
-                    <Text style={[tw`text-xs font-bold`, { color: khataType === 'udhar_liya' ? '#f59e0b' : textMuted }]}>
-                      Udhar Liya (I Took)
-                    </Text>
-                    <Text style={[tw`text-[10px] mt-0.5`, { color: textMuted }]}>Payable</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
-                  Person / Party (Khata Account)
-                </Text>
-                {khataAccounts.length === 0 ? (
-                  <TouchableOpacity
-                    style={[tw`border rounded-xl py-3 px-4 items-center`, { backgroundColor: isDark ? '#312e81' : '#eef2ff', borderColor: '#4f46e5' }]}
-                    onPress={() => navigation.navigate('Khata')}
-                  >
-                    <Text style={tw`text-indigo-500 text-sm font-bold`}>
-                      + Create a Khata Account First
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={tw`flex-row flex-wrap gap-2`}>
-                    {khataAccounts.map((acc) => (
-                      <TouchableOpacity
-                        key={acc.id}
+              {/* Account Dropdown Selector */}
+              <Text style={[tw`text-xs font-semibold mt-4 mb-2 uppercase tracking-wider`, { color: textMuted }]}>
+                Select Khata Account
+              </Text>
+              {khataAccounts.length === 0 ? (
+                <TouchableOpacity
+                  style={[tw`border border-dashed rounded-2xl p-4 items-center`, { borderColor }]}
+                  onPress={() => navigation.navigate('Khata')}
+                >
+                  <Text style={tw`text-violet-600 dark:text-violet-400 text-xs font-bold`}>
+                    + Create New Khata Account
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={tw`flex-row`}>
+                  {khataAccounts.map((acc) => (
+                    <TouchableOpacity
+                      key={acc.id}
+                      style={[
+                        tw`border rounded-2xl px-4 py-2.5 mr-2.5 shadow-sm`,
+                        selectedKhataId === acc.id
+                          ? tw`bg-violet-600 border-violet-600`
+                          : { backgroundColor: cardBg, borderColor },
+                      ]}
+                      onPress={() => setSelectedKhataId(acc.id)}
+                    >
+                      <Text
                         style={[
-                          tw`border rounded-xl px-4 py-2.5`,
-                          selectedKhataId === acc.id
-                            ? { borderColor: '#4f46e5', backgroundColor: isDark ? '#312e81' : '#eef2ff' }
-                            : { borderColor: isDark ? '#4b5563' : '#e5e7eb', backgroundColor: isDark ? '#374151' : '#f9fafb' },
+                          tw`text-xs font-bold`,
+                          selectedKhataId === acc.id ? tw`text-white` : { color: textPrimary },
                         ]}
-                        onPress={() => setSelectedKhataId(acc.id)}
                       >
-                        <Text
-                          style={[
-                            tw`text-sm font-bold`,
-                            { color: selectedKhataId === acc.id ? '#4f46e5' : textPrimary },
-                          ]}
-                        >
-                          {acc.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-            )}
+                        {acc.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+          )}
 
-            {/* Category Selector */}
-            <View style={tw`mb-4`}>
-              <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
+          {/* Amount Input */}
+          <View style={[tw`border rounded-3xl p-5 mb-6 shadow-sm`, { backgroundColor: cardBg, borderColor }]}>
+            <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
+              Amount (₹)
+            </Text>
+            <View style={tw`flex-row items-center`}>
+              <Text style={[tw`text-3xl font-black mr-2`, { color: textPrimary }]}>₹</Text>
+              <TextInput
+                style={[tw`flex-1 text-3xl font-extrabold`, { color: textPrimary }]}
+                placeholder="0.00"
+                placeholderTextColor={textMuted}
+                keyboardType="decimal-pad"
+                value={amountStr}
+                onChangeText={setAmountStr}
+                autoFocus={!isEditing}
+              />
+            </View>
+          </View>
+
+          {/* Date & Time Selector Cards */}
+          <View style={tw`flex-row gap-3 mb-6`}>
+            <TouchableOpacity
+              style={[
+                tw`flex-1 border rounded-2xl p-4 flex-row items-center gap-3 shadow-sm`,
+                { backgroundColor: cardBg, borderColor },
+              ]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Calendar color="#7c3aed" size={20} />
+              <View>
+                <Text style={[tw`text-[10px] font-bold uppercase`, { color: textMuted }]}>Date</Text>
+                <Text style={[tw`text-xs font-bold mt-0.5`, { color: textPrimary }]}>
+                  {dateStr || 'Select Date'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                tw`flex-1 border rounded-2xl p-4 flex-row items-center gap-3 shadow-sm`,
+                { backgroundColor: cardBg, borderColor },
+              ]}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <Clock color="#7c3aed" size={20} />
+              <View>
+                <Text style={[tw`text-[10px] font-bold uppercase`, { color: textMuted }]}>Time</Text>
+                <Text style={[tw`text-xs font-bold mt-0.5`, { color: textPrimary }]}>
+                  {timeStr || 'Select Time'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Category Selector Pills */}
+          <View style={tw`mb-6`}>
+            <View style={tw`flex-row justify-between items-center mb-2`}>
+              <Text style={[tw`text-xs font-semibold uppercase tracking-wider`, { color: textMuted }]}>
                 Category
               </Text>
-              {txType === 'income' ? (
-                <View style={tw`flex-row flex-wrap gap-2`}>
-                  {DEFAULT_INCOME_CATEGORIES.map((catName) => (
+              <TouchableOpacity onPress={() => setShowAddCatModal(true)}>
+                <Text style={tw`text-violet-600 dark:text-violet-400 text-xs font-bold`}>
+                  + Add Category
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={tw`flex-row py-1`}>
+              {txType === 'expense'
+                ? [
+                    ...DEFAULT_EXPENSE_CATEGORIES.map((c) => c.name),
+                    ...customExpenseCats.map((c) => c.name),
+                  ].map((catName) => (
                     <TouchableOpacity
                       key={catName}
                       style={[
-                        tw`border rounded-xl px-4 py-2.5`,
+                        tw`border rounded-2xl px-4 py-2.5 mr-2 shadow-sm`,
                         category === catName
-                          ? { borderColor: '#4f46e5', backgroundColor: isDark ? '#312e81' : '#eef2ff' }
-                          : { borderColor: isDark ? '#4b5563' : '#e5e7eb', backgroundColor: isDark ? '#374151' : '#f9fafb' },
+                          ? tw`bg-violet-600 border-violet-600`
+                          : { backgroundColor: cardBg, borderColor },
+                      ]}
+                      onPress={() => handleCategorySelect(catName)}
+                    >
+                      <Text
+                        style={[
+                          tw`text-xs font-bold`,
+                          category === catName ? tw`text-white` : { color: textPrimary },
+                        ]}
+                      >
+                        {catName}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                : [
+                    ...DEFAULT_INCOME_CATEGORIES,
+                    ...customIncomeCats.map((c) => c.name),
+                  ].map((catName) => (
+                    <TouchableOpacity
+                      key={catName}
+                      style={[
+                        tw`border rounded-2xl px-4 py-2.5 mr-2 shadow-sm`,
+                        category === catName
+                          ? tw`bg-emerald-600 border-emerald-600`
+                          : { backgroundColor: cardBg, borderColor },
                       ]}
                       onPress={() => setCategory(catName)}
                     >
                       <Text
                         style={[
-                          tw`text-sm font-bold`,
-                          { color: category === catName ? '#4f46e5' : textPrimary },
+                          tw`text-xs font-bold`,
+                          category === catName ? tw`text-white` : { color: textPrimary },
                         ]}
                       >
                         {catName}
                       </Text>
                     </TouchableOpacity>
                   ))}
-                </View>
-              ) : (
-                <View style={tw`flex-row flex-wrap gap-2`}>
-                  {DEFAULT_EXPENSE_CATEGORIES.map((catObj) => (
-                    <TouchableOpacity
-                      key={catObj.name}
-                      style={[
-                        tw`border rounded-xl px-4 py-2.5`,
-                        category === catObj.name
-                          ? { borderColor: '#4f46e5', backgroundColor: isDark ? '#312e81' : '#eef2ff' }
-                          : { borderColor: isDark ? '#4b5563' : '#e5e7eb', backgroundColor: isDark ? '#374151' : '#f9fafb' },
-                      ]}
-                      onPress={() => {
-                        setCategory(catObj.name);
-                        setSubcategory(catObj.subcategories[0]);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          tw`text-sm font-bold`,
-                          { color: category === catObj.name ? '#4f46e5' : textPrimary },
-                        ]}
-                      >
-                        {catObj.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+            </ScrollView>
+          </View>
 
-            {/* Subcategory */}
-            {txType !== 'income' && (
-              <View style={tw`mb-4`}>
-                <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
-                  Subcategory
-                </Text>
-                <View style={tw`flex-row flex-wrap gap-2`}>
-                  {activeSubcategories.map((subName) => (
-                    <TouchableOpacity
-                      key={subName}
-                      style={[
-                        tw`border rounded-xl px-3 py-2`,
-                        subcategory === subName
-                          ? { borderColor: '#4f46e5', backgroundColor: isDark ? '#312e81' : '#eef2ff' }
-                          : { borderColor: isDark ? '#4b5563' : '#e5e7eb', backgroundColor: isDark ? '#374151' : '#f9fafb' },
-                      ]}
-                      onPress={() => setSubcategory(subName)}
-                    >
-                      <Text
-                        style={[
-                          tw`text-xs font-semibold`,
-                          { color: subcategory === subName ? '#4f46e5' : textPrimary },
-                        ]}
-                      >
-                        {subName}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Payment Method */}
-            {txType !== 'khata' && (
-              <View style={tw`mb-4`}>
-                <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
-                  Payment Method
-                </Text>
-                <View style={tw`flex-row gap-2`}>
-                  {['UPI', 'Cash', 'Debit Card', 'Credit Card'].map((method) => (
-                    <TouchableOpacity
-                      key={method}
-                      style={[
-                        tw`flex-1 border rounded-xl py-2.5 items-center`,
-                        paymentMethod === method
-                          ? { borderColor: '#4f46e5', backgroundColor: isDark ? '#312e81' : '#eef2ff' }
-                          : { borderColor: isDark ? '#4b5563' : '#e5e7eb', backgroundColor: isDark ? '#374151' : '#f9fafb' },
-                      ]}
-                      onPress={() => setPaymentMethod(method)}
-                    >
-                      <Text
-                        style={[
-                          tw`text-xs font-bold`,
-                          { color: paymentMethod === method ? '#4f46e5' : textPrimary },
-                        ]}
-                      >
-                        {method}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Description */}
-            <View style={tw`mb-2`}>
+          {/* Subcategory Pills (for Expense) */}
+          {txType === 'expense' && activeSubcategories.length > 0 && (
+            <View style={tw`mb-6`}>
               <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
-                Description (Optional)
+                Subcategory
               </Text>
-              <TextInput
-                style={[
-                  tw`border rounded-xl px-4 py-3 text-sm`,
-                  { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor: isDark ? '#4b5563' : '#e5e7eb', color: textPrimary },
-                ]}
-                placeholder="e.g. dinner, laundry, grocery bills"
-                placeholderTextColor={textMuted}
-                value={description}
-                onChangeText={setDescription}
-              />
-            </View>
-          </View>
-
-          {/* Date and Time Native Picker Section */}
-          <View style={[tw`rounded-2xl p-5 shadow-sm border mb-6`, { backgroundColor: cardBg, borderColor }]}>
-            <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-3`, { color: textMuted }]}>
-              Transaction Date & Time
-            </Text>
-
-            <View style={tw`flex-row gap-3`}>
-              {/* Date Button */}
-              <TouchableOpacity
-                style={[
-                  tw`flex-1 border rounded-xl p-3 flex-row items-center gap-2.5`,
-                  { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor: isDark ? '#4b5563' : '#e5e7eb' },
-                ]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Calendar color="#4f46e5" size={18} />
-                <View>
-                  <Text style={[tw`text-[10px] uppercase font-bold`, { color: textMuted }]}>Date</Text>
-                  <Text style={[tw`text-xs font-bold mt-0.5`, { color: textPrimary }]}>{dateStr}</Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Time Button */}
-              <TouchableOpacity
-                style={[
-                  tw`flex-1 border rounded-xl p-3 flex-row items-center gap-2.5`,
-                  { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor: isDark ? '#4b5563' : '#e5e7eb' },
-                ]}
-                onPress={() => setShowTimePicker(true)}
-              >
-                <Clock color="#4f46e5" size={18} />
-                <View>
-                  <Text style={[tw`text-[10px] uppercase font-bold`, { color: textMuted }]}>Time</Text>
-                  <Text style={[tw`text-xs font-bold mt-0.5`, { color: textPrimary }]}>{timeStr}</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Receipt / Photo Section */}
-          <View style={[tw`rounded-2xl p-5 shadow-sm border mb-6`, { backgroundColor: cardBg, borderColor }]}>
-            <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-3`, { color: textMuted }]}>
-              Receipt Photo (Optional)
-            </Text>
-
-            {receiptUri ? (
-              <View style={tw`items-center`}>
-                <View style={tw`relative rounded-xl overflow-hidden mb-2 border border-gray-300 dark:border-gray-700`}>
-                  <Image source={{ uri: receiptUri }} style={tw`w-full h-44`} resizeMode="cover" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={tw`flex-row py-1`}>
+                {activeSubcategories.map((sub) => (
                   <TouchableOpacity
-                    style={tw`absolute top-2 right-2 bg-black/60 rounded-full p-1.5`}
-                    onPress={() => setReceiptUri(null)}
+                    key={sub}
+                    style={[
+                      tw`border rounded-xl px-3.5 py-2 mr-2`,
+                      subcategory === sub
+                        ? tw`bg-violet-100 border-violet-500 dark:bg-violet-950`
+                        : { backgroundColor: cardBg, borderColor },
+                    ]}
+                    onPress={() => setSubcategory(sub)}
                   >
-                    <X color="#ffffff" size={16} />
+                    <Text
+                      style={[
+                        tw`text-xs font-semibold`,
+                        subcategory === sub ? tw`text-violet-600 dark:text-violet-300` : { color: textPrimary },
+                      ]}
+                    >
+                      {sub}
+                    </Text>
                   </TouchableOpacity>
-                </View>
-                <Text style={tw`text-xs font-bold text-emerald-600 dark:text-emerald-400`}>
-                  Receipt attached successfully
-                </Text>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Payment Method Selector */}
+          <View style={tw`mb-6`}>
+            <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
+              Payment Method
+            </Text>
+            <View style={tw`flex-row flex-wrap gap-2`}>
+              {['UPI', 'Cash', 'Debit Card', 'Credit Card', 'Bank Transfer'].map((pm) => (
+                <TouchableOpacity
+                  key={pm}
+                  style={[
+                    tw`border rounded-2xl px-4 py-2.5 shadow-sm`,
+                    paymentMethod === pm
+                      ? tw`bg-violet-600 border-violet-600`
+                      : { backgroundColor: cardBg, borderColor },
+                  ]}
+                  onPress={() => setPaymentMethod(pm)}
+                >
+                  <Text
+                    style={[
+                      tw`text-xs font-bold`,
+                      paymentMethod === pm ? tw`text-white` : { color: textPrimary },
+                    ]}
+                  >
+                    {pm}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Optional Note / Description Input */}
+          <View style={[tw`border rounded-3xl p-5 mb-6 shadow-sm`, { backgroundColor: cardBg, borderColor }]}>
+            <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-2`, { color: textMuted }]}>
+              Note / Description (Optional)
+            </Text>
+            <TextInput
+              style={[tw`text-sm font-medium`, { color: textPrimary }]}
+              placeholder="e.g. Swiggy lunch with team"
+              placeholderTextColor={textMuted}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+            />
+          </View>
+
+          {/* Attach Receipt Photo Section */}
+          <View style={[tw`border rounded-3xl p-5 mb-8 shadow-sm`, { backgroundColor: cardBg, borderColor }]}>
+            <Text style={[tw`text-xs font-semibold uppercase tracking-wider mb-3`, { color: textMuted }]}>
+              Attach Receipt Photo
+            </Text>
+            {receiptUri ? (
+              <View style={tw`relative items-center`}>
+                <Image source={{ uri: receiptUri }} style={tw`w-full h-44 rounded-2xl`} resizeMode="cover" />
+                <TouchableOpacity
+                  style={tw`absolute top-2 right-2 bg-black/70 p-2 rounded-full`}
+                  onPress={() => setReceiptUri(null)}
+                >
+                  <X color="#ffffff" size={16} />
+                </TouchableOpacity>
               </View>
             ) : (
               <View style={tw`flex-row gap-3`}>
                 <TouchableOpacity
-                  style={[
-                    tw`flex-1 border border-dashed rounded-xl p-3 flex-row items-center justify-center gap-2`,
-                    { borderColor: isDark ? '#4b5563' : '#d1d5db', backgroundColor: isDark ? '#374151' : '#f9fafb' },
-                  ]}
-                  onPress={handleTakePhoto}
+                  style={[tw`flex-1 border border-dashed rounded-2xl p-4 items-center gap-1.5`, { borderColor }]}
+                  onPress={handleTakeCamera}
                 >
-                  <Camera color="#4f46e5" size={18} />
-                  <Text style={[tw`text-xs font-bold`, { color: textPrimary }]}>Camera</Text>
+                  <Camera color="#7c3aed" size={20} />
+                  <Text style={tw`text-violet-600 dark:text-violet-400 text-xs font-bold`}>Camera</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[
-                    tw`flex-1 border border-dashed rounded-xl p-3 flex-row items-center justify-center gap-2`,
-                    { borderColor: isDark ? '#4b5563' : '#d1d5db', backgroundColor: isDark ? '#374151' : '#f9fafb' },
-                  ]}
-                  onPress={handlePickGallery}
+                  style={[tw`flex-1 border border-dashed rounded-2xl p-4 items-center gap-1.5`, { borderColor }]}
+                  onPress={handlePickImage}
                 >
-                  <ImageIcon color="#4f46e5" size={18} />
-                  <Text style={[tw`text-xs font-bold`, { color: textPrimary }]}>Gallery</Text>
+                  <ImageIcon color="#7c3aed" size={20} />
+                  <Text style={tw`text-violet-600 dark:text-violet-400 text-xs font-bold`}>Gallery</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -641,44 +677,96 @@ export default function AddTransactionScreen({ route, navigation }: any) {
 
           {/* Submit Button */}
           <TouchableOpacity
-            style={tw`bg-indigo-600 rounded-xl py-3.5 items-center justify-center shadow-md mb-8`}
+            style={tw`bg-violet-600 rounded-3xl py-4 items-center shadow-lg mb-8`}
             onPress={handleSubmit}
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator color="#ffffff" size="small" />
+              <ActivityIndicator color="#ffffff" />
             ) : (
-              <Text style={tw`text-white text-base font-bold`}>Save Transaction</Text>
+              <Text style={tw`text-white font-black text-base`}>
+                {isEditing ? 'Update Record' : 'Save Record'}
+              </Text>
             )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Date Picker Modal */}
+      {/* Date & Time Picker Modals */}
       <DateTimePickerModal
         visible={showDatePicker}
         mode="date"
         value={pickerDate}
-        onChange={(event, selectedDate) => {
-          if (selectedDate) setPickerDate(selectedDate);
+        onConfirm={(selectedDate) => {
+          setShowDatePicker(false);
+          setPickerDate(selectedDate);
+          const yyyy = selectedDate.getFullYear();
+          const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
+          const dd = String(selectedDate.getDate()).padStart(2, '0');
+          setDateStr(`${yyyy}-${mm}-${dd}`);
         }}
-        onConfirm={handleDateConfirm}
         onCancel={() => setShowDatePicker(false)}
-        title="Select Date"
       />
 
-      {/* Time Picker Modal */}
       <DateTimePickerModal
         visible={showTimePicker}
         mode="time"
         value={pickerDate}
-        onChange={(event, selectedDate) => {
-          if (selectedDate) setPickerDate(selectedDate);
+        onConfirm={(selectedTime) => {
+          setShowTimePicker(false);
+          setPickerDate(selectedTime);
+          const hh = String(selectedTime.getHours()).padStart(2, '0');
+          const min = String(selectedTime.getMinutes()).padStart(2, '0');
+          const ss = String(selectedTime.getSeconds()).padStart(2, '0');
+          setTimeStr(`${hh}:${min}:${ss}`);
         }}
-        onConfirm={handleTimeConfirm}
         onCancel={() => setShowTimePicker(false)}
-        title="Select Time"
       />
+
+      {/* Custom Category Creation Modal */}
+      {showAddCatModal && (
+        <Modal
+          visible={showAddCatModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowAddCatModal(false)}
+        >
+          <View style={tw`flex-1 justify-center items-center bg-black/60 px-6`}>
+            <View style={[tw`w-full rounded-3xl p-6 shadow-xl`, { backgroundColor: cardBg }]}>
+              <View style={tw`flex-row justify-between items-center mb-4`}>
+                <Text style={[tw`text-lg font-bold`, { color: textPrimary }]}>
+                  Create Custom Category
+                </Text>
+                <TouchableOpacity onPress={() => setShowAddCatModal(false)}>
+                  <X color={textMuted} size={20} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[tw`text-xs font-semibold uppercase mb-2`, { color: textMuted }]}>
+                Category Name
+              </Text>
+              <TextInput
+                style={[
+                  tw`border rounded-2xl px-4 py-3 text-sm font-semibold mb-5`,
+                  { color: textPrimary, backgroundColor: bg, borderColor },
+                ]}
+                placeholder="e.g. Subscriptions, Pet Care"
+                placeholderTextColor={textMuted}
+                value={newCatName}
+                onChangeText={setNewCatName}
+                autoFocus
+              />
+
+              <TouchableOpacity
+                style={tw`bg-violet-600 rounded-2xl py-3.5 items-center shadow-md`}
+                onPress={handleAddCustomCat}
+              >
+                <Text style={tw`text-white font-bold text-sm`}>Add Category</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }

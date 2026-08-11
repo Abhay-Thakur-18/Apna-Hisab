@@ -27,8 +27,10 @@ export default function HomeScreen({ navigation }: any) {
   const {
     transactions,
     fetchTransactions,
-    khataAccounts,
     fetchKhataAccounts,
+    getTotalIncome,
+    getTotalExpenses,
+    getCurrentBalance,
   } = useTransactionStore();
 
   const { monthlyBudget, loadBudget } = useBudgetStore();
@@ -41,15 +43,11 @@ export default function HomeScreen({ navigation }: any) {
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
-  // Summary Stats
-  const [totalIncome, setTotalIncome] = useState(0);
-  const [totalExpense, setTotalExpense] = useState(0);
+  const [todayExpense, setTodayExpense] = useState(0);
+  const [weekExpense, setWeekExpense] = useState(0);
   const [monthExpense, setMonthExpense] = useState(0);
   const [totalUdharDiya, setTotalUdharDiya] = useState(0);
   const [totalUdharLiya, setTotalUdharLiya] = useState(0);
-
-  const [todayExpense, setTodayExpense] = useState(0);
-  const [weekExpense, setWeekExpense] = useState(0);
 
   const loadData = async () => {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -74,10 +72,8 @@ export default function HomeScreen({ navigation }: any) {
     loadData();
   }, []);
 
-  // Compute stats dynamically
+  // Compute breakdown stats dynamically from single source of truth
   useEffect(() => {
-    let incomeSum = 0;
-    let expenseSum = 0;
     let mExpenseSum = 0;
     let diyaSum = 0;
     let liyaSum = 0;
@@ -93,12 +89,8 @@ export default function HomeScreen({ navigation }: any) {
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
 
     transactions.forEach((tx) => {
-      if (tx.type === 'income') {
-        incomeSum += tx.amount;
-      } else {
+      if (tx.type === 'expense') {
         const paid = tx.paid_amount || tx.amount;
-        expenseSum += paid;
-
         if (tx.date >= firstDayOfMonthStr) {
           mExpenseSum += paid;
         }
@@ -120,8 +112,6 @@ export default function HomeScreen({ navigation }: any) {
       }
     });
 
-    setTotalIncome(incomeSum);
-    setTotalExpense(expenseSum);
     setMonthExpense(mExpenseSum);
     setTotalUdharDiya(diyaSum);
     setTotalUdharLiya(liyaSum);
@@ -153,7 +143,7 @@ export default function HomeScreen({ navigation }: any) {
       await fetchTransactions();
       await fetchKhataAccounts();
 
-      Alert.alert('Approved', `${instance.category} entry generated.`);
+      Alert.alert('Approved', `${instance.category} entry recorded.`);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to approve entry.');
     } finally {
@@ -161,18 +151,14 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
-  const getGreeting = () => {
-    const hrs = new Date().getHours();
-    if (hrs < 12) return 'Good Morning';
-    if (hrs < 17) return 'Good Afternoon';
-    return 'Good Evening';
-  };
-
   const getMonthName = () => {
     return new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
   };
 
-  const remainingBalance = totalIncome - totalExpense;
+  // Single Source of Truth Values
+  const totalIncome = getTotalIncome();
+  const totalExpense = getTotalExpenses();
+  const remainingBalance = getCurrentBalance();
 
   // Budget Calculations
   const budgetPercentage = monthlyBudget > 0 ? Math.min(Math.round((monthExpense / monthlyBudget) * 100), 100) : 0;
@@ -202,10 +188,10 @@ export default function HomeScreen({ navigation }: any) {
       >
         <View>
           <Text style={[tw`text-xs font-semibold uppercase tracking-wider`, { color: textMuted }]}>
-            {getGreeting()}
+            Overview
           </Text>
           <Text style={[tw`text-xl font-bold`, { color: textPrimary }]}>
-            Namaste, {user?.name?.split(' ')[0] || 'Friend'}
+            Your finances, simplified.
           </Text>
         </View>
 
@@ -238,7 +224,7 @@ export default function HomeScreen({ navigation }: any) {
                 {dueRecurring.length} Recurring Entries Due
               </Text>
               <Text style={tw`text-indigo-700 dark:text-indigo-400 text-xs mt-0.5`}>
-                Tap to review and approve (Tiffin, Rent, etc.)
+                Tap to review and approve (Rent, Tiffin, etc.)
               </Text>
             </View>
             <View style={tw`bg-indigo-600 rounded-xl px-3.5 py-2`}>
@@ -260,12 +246,12 @@ export default function HomeScreen({ navigation }: any) {
 
           <View style={tw`flex-row justify-between`}>
             <View style={tw`flex-1`}>
-              <Text style={tw`text-violet-200 text-xs font-medium mb-0.5`}>Income</Text>
+              <Text style={tw`text-violet-200 text-xs font-medium mb-0.5`}>Total Income</Text>
               <Text style={tw`text-white text-lg font-bold`}>{formatRupees(totalIncome)}</Text>
             </View>
             <View style={tw`w-px bg-violet-500/50 mx-4`} />
             <View style={tw`flex-1`}>
-              <Text style={tw`text-violet-200 text-xs font-medium mb-0.5`}>Expenses</Text>
+              <Text style={tw`text-violet-200 text-xs font-medium mb-0.5`}>Total Expenses</Text>
               <Text style={tw`text-white text-lg font-bold`}>{formatRupees(totalExpense)}</Text>
             </View>
           </View>
@@ -290,7 +276,7 @@ export default function HomeScreen({ navigation }: any) {
             <View>
               <View style={tw`flex-row justify-between items-center mb-2`}>
                 <Text style={[tw`text-xs font-bold`, { color: textPrimary }]}>
-                  {formatRupees(monthExpense)} of {formatRupees(monthlyBudget)}
+                  {formatRupees(monthExpense)} spent of {formatRupees(monthlyBudget)}
                 </Text>
                 <Text
                   style={[
@@ -328,7 +314,7 @@ export default function HomeScreen({ navigation }: any) {
                 No budget limit configured for this month.
               </Text>
               <Text style={tw`text-violet-600 dark:text-violet-400 text-xs font-bold`}>
-                Set Budget →
+                Manage Budget →
               </Text>
             </View>
           )}
@@ -412,7 +398,7 @@ export default function HomeScreen({ navigation }: any) {
               No transactions recorded yet
             </Text>
             <Text style={{ color: textMuted, fontSize: 12, marginTop: 4 }}>
-              Tap the "+" button below to get started
+              Tap the "+" button below to add your first transaction
             </Text>
           </View>
         ) : (

@@ -10,7 +10,6 @@ import {
   Home as HomeIcon,
   History as HistoryIcon,
   Wallet as WalletIcon,
-  CheckSquare as ChecklistIcon,
   PieChart as AnalyticsIcon,
   Settings as SettingsIcon,
 } from 'lucide-react-native';
@@ -26,7 +25,6 @@ import ReportsScreen from './screens/ReportsScreen';
 import TransactionsScreen from './screens/TransactionsScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import PinUnlockScreen from './screens/PinUnlockScreen';
-import ChecklistScreen from './screens/ChecklistScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
 const Stack = createStackNavigator();
@@ -93,16 +91,7 @@ function AppTabs() {
           tabBarIcon: ({ color, size }) => <WalletIcon color={color} size={size - 2} />,
         }}
       />
-      <Tab.Screen
-        name="Checklist"
-        component={ChecklistScreen}
-        options={{
-          title: 'Checklist',
-          headerShown: false,
-          tabBarLabel: 'Checklist',
-          tabBarIcon: ({ color, size }) => <ChecklistIcon color={color} size={size - 2} />,
-        }}
-      />
+
       <Tab.Screen
         name="Reports"
         component={ReportsScreen}

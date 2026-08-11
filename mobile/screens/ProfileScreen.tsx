@@ -123,7 +123,7 @@ export default function ProfileScreen({ navigation }: any) {
             onEndEditing={handleSaveName}
           />
           <Text style={[tw`text-xs mt-1`, { color: textMuted }]}>
-            {user?.email || 'offline@local.app'}
+            {user?.email || 'Personal Finance Account'}
           </Text>
         </View>
 
