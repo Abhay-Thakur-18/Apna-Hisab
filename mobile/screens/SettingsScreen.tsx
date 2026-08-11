@@ -19,9 +19,6 @@ import { useThemeStore, useIsDark } from '../store/themeStore';
 import { API_URL, apiRequest, OFFLINE_ONLY } from '../services/api';
 import { formatRupees, rupeesToPaise } from '../utils/money';
 import { DEFAULT_EXPENSE_CATEGORIES } from '../utils/categories';
-import { documentDirectory, downloadAsync, readAsStringAsync, writeAsStringAsync } from 'expo-file-system/legacy';
-import { shareAsync } from 'expo-sharing';
-import { getDocumentAsync } from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SettingsScreen({ navigation }: any) {
@@ -180,197 +177,7 @@ export default function SettingsScreen({ navigation }: any) {
     );
   };
 
-  const handleExportCSV = async () => {
-    try {
-      const fileUri = `${documentDirectory}apna_hisab_statement.csv`;
 
-      if (OFFLINE_ONLY) {
-        const txStr = await AsyncStorage.getItem('offline_transactions');
-        const transactions = txStr ? JSON.parse(txStr) : [];
-        
-        transactions.sort((a: any, b: any) => {
-          if (a.date !== b.date) return b.date.localeCompare(a.date);
-          return b.time.localeCompare(a.time);
-        });
-
-        const headers = [
-          "Date", "Time", "Type", "Category", "Subcategory", 
-          "Amount (INR)", "Paid Amount (INR)", "Pending Amount (INR)", 
-          "Status", "Payment Method", "Description"
-        ];
-        const rows = transactions.map((tx: any) => [
-          tx.date,
-          tx.time,
-          tx.type.toUpperCase(),
-          tx.category,
-          tx.subcategory,
-          (tx.amount / 100).toFixed(2),
-          ((tx.paid_amount || tx.amount) / 100).toFixed(2),
-          ((tx.pending_amount || 0) / 100).toFixed(2),
-          (tx.status || 'paid').toUpperCase(),
-          tx.payment_method,
-          tx.description || ''
-        ]);
-
-        const csvContent = [
-          headers.join(','),
-          ...rows.map((row: any[]) => row.map((val: any) => {
-            const s = String(val).replace(/"/g, '""');
-            return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
-          }).join(','))
-        ].join('\n');
-
-        await writeAsStringAsync(fileUri, csvContent);
-        await shareAsync(fileUri);
-        return;
-      }
-
-      const token = await AsyncStorage.getItem('token');
-      if (!token) return;
-      
-      const downloadRes = await downloadAsync(
-        `${API_URL}/api/backup/export/csv`,
-        fileUri,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      
-      if (downloadRes.status === 200) {
-        await shareAsync(fileUri);
-      } else {
-        Alert.alert('Error', 'Failed to generate CSV statement.');
-      }
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Export failed.');
-    }
-  };
-
-  const handleExportJSON = async () => {
-    try {
-      const fileUri = `${documentDirectory}apna_hisab_backup.json`;
-
-      if (OFFLINE_ONLY) {
-        const txStr = await AsyncStorage.getItem('offline_transactions');
-        const transactions = txStr ? JSON.parse(txStr) : [];
-        
-        const khStr = await AsyncStorage.getItem('offline_khata_accounts');
-        const khata_accounts = khStr ? JSON.parse(khStr) : [];
-
-        const recStr = await AsyncStorage.getItem('offline_recurring_templates');
-        const recurring_templates = recStr ? JSON.parse(recStr) : [];
-
-        const backupData = {
-          export_date: new Date().toISOString(),
-          user_email: 'offline@local.app',
-          transactions,
-          khata_accounts,
-          recurring_templates,
-          payments: [],
-          categories: []
-        };
-
-        await writeAsStringAsync(fileUri, JSON.stringify(backupData, null, 2));
-        await shareAsync(fileUri);
-        return;
-      }
-
-      const token = await AsyncStorage.getItem('token');
-      if (!token) return;
-      
-      const downloadRes = await downloadAsync(
-        `${API_URL}/api/backup/export/json`,
-        fileUri,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      
-      if (downloadRes.status === 200) {
-        await shareAsync(fileUri);
-      } else {
-        Alert.alert('Error', 'Failed to generate JSON backup.');
-      }
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Export failed.');
-    }
-  };
-
-  const handleImportJSON = async () => {
-    try {
-      const result = await getDocumentAsync({
-        type: 'application/json',
-        copyToCacheDirectory: true,
-      });
-      
-      if (result.canceled) return;
-      const file = result.assets[0];
-      
-      const content = await readAsStringAsync(file.uri);
-      const backupData = JSON.parse(content);
-      
-      if (!backupData.transactions || !backupData.khata_accounts) {
-        Alert.alert('Invalid Backup File', 'The selected JSON is not a valid Apna Hisab backup.');
-        return;
-      }
-      
-      Alert.alert(
-        'Confirm Restore',
-        'Restoring this backup will overwrite all your current transactions, khata records, and custom categories. This cannot be undone. Proceed?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Restore',
-            onPress: async () => {
-              try {
-                if (OFFLINE_ONLY) {
-                  await AsyncStorage.setItem('offline_transactions', JSON.stringify(backupData.transactions));
-                  await AsyncStorage.setItem('offline_khata_accounts', JSON.stringify(backupData.khata_accounts));
-                  if (backupData.recurring_templates) {
-                    await AsyncStorage.setItem('offline_recurring_templates', JSON.stringify(backupData.recurring_templates));
-                  }
-                  Alert.alert('Success', 'Backup restored successfully.');
-                  const store = useTransactionStore.getState();
-                  await store.fetchTransactions();
-                  await store.fetchKhataAccounts();
-                  return;
-                }
-
-                const token = await AsyncStorage.getItem('token');
-                const response = await fetch(`${API_URL}/api/backup/import/json`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                  },
-                  body: content,
-                });
-                
-                const resData = await response.json();
-                if (response.ok) {
-                  Alert.alert('Success', 'Backup restored successfully. Please reload your dashboard.');
-                  // Trigger refresh of lists
-                  const store = useTransactionStore.getState();
-                  store.fetchTransactions();
-                  store.fetchKhataAccounts();
-                } else {
-                  Alert.alert('Failed', resData.detail || 'Import failed.');
-                }
-              } catch (err: any) {
-                Alert.alert('Error', err.message || 'Restore request failed.');
-              }
-            }
-          }
-        ]
-      );
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to parse or read the file.');
-    }
-  };
 
   const handleTogglePinLock = () => {
     setEnteredPin('');
@@ -451,7 +258,7 @@ export default function SettingsScreen({ navigation }: any) {
           </TouchableOpacity>
 
           {/* PIN Lock settings item */}
-          <View style={[tw`flex-row justify-between items-center px-5 py-3.5 border-b`, { borderColor }]}>
+          <View style={tw`flex-row justify-between items-center px-5 py-4`}>
             <View style={tw`flex-1 mr-3`}>
               <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>App Passcode Lock</Text>
               <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>
@@ -465,42 +272,6 @@ export default function SettingsScreen({ navigation }: any) {
               thumbColor={appPin ? '#6C5CE7' : '#f3f4f6'}
             />
           </View>
-
-          {/* Export CSV item */}
-          <TouchableOpacity
-            style={[tw`flex-row justify-between items-center px-5 py-4 border-b`, { borderColor }]}
-            onPress={handleExportCSV}
-          >
-            <View>
-              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Export CSV Statement</Text>
-              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Download financial ledger for Excel/Sheets</Text>
-            </View>
-            <Text style={{ color: textMuted, fontWeight: 'bold' }}>›</Text>
-          </TouchableOpacity>
-
-          {/* Export JSON item */}
-          <TouchableOpacity
-            style={[tw`flex-row justify-between items-center px-5 py-4 border-b`, { borderColor }]}
-            onPress={handleExportJSON}
-          >
-            <View>
-              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Backup Data (JSON)</Text>
-              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Export a backup file of your account records</Text>
-            </View>
-            <Text style={{ color: textMuted, fontWeight: 'bold' }}>›</Text>
-          </TouchableOpacity>
-
-          {/* Import JSON item */}
-          <TouchableOpacity
-            style={tw`flex-row justify-between items-center px-5 py-4`}
-            onPress={handleImportJSON}
-          >
-            <View>
-              <Text style={[tw`text-sm font-bold`, { color: textPrimary }]}>Restore Data (JSON)</Text>
-              <Text style={[tw`text-xs mt-0.5`, { color: textMuted }]}>Import previous data backup to your account</Text>
-            </View>
-            <Text style={{ color: textMuted, fontWeight: 'bold' }}>›</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Theme Selector Card */}

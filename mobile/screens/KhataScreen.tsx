@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,12 @@ import {
   StatusBar,
   Modal,
   ActivityIndicator,
+  Animated,
+  Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
+import { Check } from 'lucide-react-native';
 import { useTransactionStore } from '../store/transactionStore';
 import { useIsDark } from '../store/themeStore';
 import { formatRupees } from '../utils/money';
@@ -37,6 +40,50 @@ export default function KhataScreen({ navigation }: any) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+
+  // Premium Material 3 Success Modal State & Animations
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const scaleAnim = useRef(new Animated.Value(0.7)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  const triggerSuccessModal = () => {
+    setShowSuccessModal(true);
+    scaleAnim.setValue(0.7);
+    opacityAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const handleDismissSuccessModal = () => {
+    try {
+      Vibration.vibrate(40);
+    } catch {}
+    Animated.parallel([
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.85,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowSuccessModal(false);
+    });
+  };
 
   // Payment Modal State
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -74,7 +121,7 @@ export default function KhataScreen({ navigation }: any) {
       setNewName('');
       setNewDesc('');
       setShowCreateModal(false);
-      Alert.alert('Success', 'Khata account created.');
+      triggerSuccessModal();
     } else {
       Alert.alert('Error', 'Failed to create Khata account.');
     }
@@ -360,7 +407,7 @@ export default function KhataScreen({ navigation }: any) {
                 <Text style={[tw`font-semibold text-sm`, { color: textPrimary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={tw`flex-1 bg-indigo-600 rounded-xl py-3 items-center`}
+                style={tw`flex-1 bg-[#6C5CE7] rounded-xl py-3 items-center`}
                 onPress={handleCreateAccount}
               >
                 <Text style={tw`text-white font-bold text-sm`}>Create</Text>
@@ -368,6 +415,52 @@ export default function KhataScreen({ navigation }: any) {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* PREMIUM MATERIAL 3 SUCCESS DIALOG FOR KHATA ACCOUNT CREATION */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="none"
+        onRequestClose={handleDismissSuccessModal}
+      >
+        <Animated.View style={[tw`flex-1 justify-center items-center bg-black/50 px-6`, { opacity: opacityAnim }]}>
+          <Animated.View
+            style={[
+              tw`rounded-[24px] p-6 w-[85%] max-w-sm items-center shadow-2xl`,
+              {
+                backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF',
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
+          >
+            {/* Green Circular Success Icon */}
+            <View style={tw`w-16 h-16 bg-[#22C55E]/15 rounded-full items-center justify-center mb-4 border border-[#22C55E]/30`}>
+              <View style={tw`w-12 h-12 bg-[#22C55E] rounded-full items-center justify-center shadow-md`}>
+                <Check color="#FFFFFF" size={28} strokeWidth={3} />
+              </View>
+            </View>
+
+            {/* Title */}
+            <Text style={[tw`text-[22px] font-bold text-center mb-1.5`, { color: textPrimary }]}>
+              Success
+            </Text>
+
+            {/* Message */}
+            <Text style={[tw`text-[16px] font-medium text-center mb-6 px-2`, { color: textMuted }]}>
+              Khata account created successfully.
+            </Text>
+
+            {/* Continue Button */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={tw`w-full h-12 bg-[#22C55E] rounded-xl items-center justify-center shadow-md active:scale-98`}
+              onPress={handleDismissSuccessModal}
+            >
+              <Text style={tw`text-white font-bold text-[16px]`}>Continue</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
       </Modal>
 
       {/* RECORD PAYMENT MODAL */}
