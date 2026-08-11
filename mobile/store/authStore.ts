@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, setAuthToken, clearAuthToken, OFFLINE_ONLY } from '../services/api';
+import { useTransactionStore } from './transactionStore';
+import { useBudgetStore } from './budgetStore';
 
 interface User {
   id: string;
@@ -165,20 +167,48 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    if (OFFLINE_ONLY) {
-      return;
-    }
     set({ isLoading: true });
     try {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
+      await AsyncStorage.removeItem('app_pin');
+      await AsyncStorage.removeItem('offline_transactions');
+      await AsyncStorage.removeItem('offline_khata_accounts');
+      await AsyncStorage.removeItem('offline_recurring_templates');
+      await AsyncStorage.removeItem('offline_budgets_list');
+      await AsyncStorage.removeItem('user_name');
+      await AsyncStorage.removeItem('user_avatar');
+      await AsyncStorage.removeItem('last_expense_cat');
+      await AsyncStorage.removeItem('last_expense_sub');
+      await AsyncStorage.removeItem('last_payment_method');
+      await AsyncStorage.removeItem('last_income_cat');
+
       clearAuthToken();
+      
       set({
-        token: null,
-        user: null,
-        isAuthenticated: false,
+        token: 'offline_token',
+        user: {
+          id: 'offline_user',
+          email: 'offline@local.app',
+          name: 'Offline User',
+          created_at: new Date().toISOString()
+        },
+        appPin: null,
+        isAppLocked: false,
+        isAuthenticated: true,
         isLoading: false,
       });
+
+      // Reset linked stores
+      const txStore = useTransactionStore.getState();
+      if (txStore) {
+        await txStore.fetchTransactions();
+        await txStore.fetchKhataAccounts();
+      }
+      const budgetStore = useBudgetStore.getState();
+      if (budgetStore) {
+        await budgetStore.loadBudget();
+      }
     } catch (err) {
       set({ isLoading: false });
     }

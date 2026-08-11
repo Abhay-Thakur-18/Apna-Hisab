@@ -2,7 +2,7 @@
   "expo": {
     "name": "Apna Hisab",
     "slug": "apna-hisab",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.apnahisab.app",
-      "versionCode": 9,
+      "versionCode": 10,
       "adaptiveIcon": {
         "backgroundColor": "#F8F8F8",
         "foregroundImage": "./assets/android-icon-foreground.png"

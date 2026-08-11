@@ -12,6 +12,8 @@ import {
   ActivityIndicator,
   Animated,
   Vibration,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
@@ -378,43 +380,48 @@ export default function KhataScreen({ navigation }: any) {
         animationType="fade"
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View style={tw`flex-1 justify-center items-center bg-black/40 px-6`}>
-          <View style={[tw`rounded-2xl p-6 w-full max-w-sm`, { backgroundColor: cardBg }]}>
-            <Text style={[tw`text-lg font-bold mb-4`, { color: textPrimary }]}>Add Khata Ledger</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={tw`flex-1`}
+        >
+          <View style={tw`flex-1 justify-center items-center bg-black/40 px-6`}>
+            <View style={[tw`rounded-2xl p-6 w-full max-w-sm`, { backgroundColor: cardBg }]}>
+              <Text style={[tw`text-lg font-bold mb-4`, { color: textPrimary }]}>Add Khata Ledger</Text>
 
-            <TextInput
-              style={[tw`border rounded-xl px-4 py-3 text-sm mb-3`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
-              placeholder="e.g. Milk Vendor, Daily Tiffin"
-              placeholderTextColor={textMuted}
-              value={newName}
-              onChangeText={setNewName}
-              autoFocus
-            />
+              <TextInput
+                style={[tw`border rounded-xl px-4 py-3 text-sm mb-3`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
+                placeholder="e.g. Milk Vendor, Daily Tiffin"
+                placeholderTextColor={textMuted}
+                value={newName}
+                onChangeText={setNewName}
+                autoFocus
+              />
 
-            <TextInput
-              style={[tw`border rounded-xl px-4 py-3 text-sm mb-4`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
-              placeholder="Description (Optional)"
-              placeholderTextColor={textMuted}
-              value={newDesc}
-              onChangeText={setNewDesc}
-            />
+              <TextInput
+                style={[tw`border rounded-xl px-4 py-3 text-sm mb-4`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
+                placeholder="Description (Optional)"
+                placeholderTextColor={textMuted}
+                value={newDesc}
+                onChangeText={setNewDesc}
+              />
 
-            <View style={tw`flex-row gap-3`}>
-              <TouchableOpacity
-                style={[tw`flex-1 border rounded-xl py-3 items-center`, { borderColor }]}
-                onPress={() => setShowCreateModal(false)}
-              >
-                <Text style={[tw`font-semibold text-sm`, { color: textPrimary }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={tw`flex-1 bg-[#6C5CE7] rounded-xl py-3 items-center`}
-                onPress={handleCreateAccount}
-              >
-                <Text style={tw`text-white font-bold text-sm`}>Create</Text>
-              </TouchableOpacity>
+              <View style={tw`flex-row gap-3`}>
+                <TouchableOpacity
+                  style={[tw`flex-1 border rounded-xl py-3 items-center`, { borderColor }]}
+                  onPress={() => setShowCreateModal(false)}
+                >
+                  <Text style={[tw`font-semibold text-sm`, { color: textPrimary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={tw`flex-1 bg-[#6C5CE7] rounded-xl py-3 items-center`}
+                  onPress={handleCreateAccount}
+                >
+                  <Text style={tw`text-white font-bold text-sm`}>Create</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* PREMIUM MATERIAL 3 SUCCESS DIALOG FOR KHATA ACCOUNT CREATION */}
@@ -471,113 +478,122 @@ export default function KhataScreen({ navigation }: any) {
           animationType="slide"
           onRequestClose={() => setShowPaymentModal(false)}
         >
-          <View style={tw`flex-1 justify-end bg-black/50`}>
-            <View style={[tw`rounded-t-3xl p-6`, { backgroundColor: cardBg }]}>
-              <View style={tw`flex-row justify-between items-center mb-5`}>
-                <Text style={[tw`text-lg font-bold`, { color: textPrimary }]}>
-                  Pay → {activeAccount.name}
-                </Text>
-                <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
-                  <Text style={[tw`font-bold text-sm`, { color: textMuted }]}>Close</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Transaction Selector */}
-              <View style={tw`mb-4`}>
-                <Text style={tw`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2`}>
-                  Choose Entry to Pay
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={tw`flex-row gap-2`}>
-                  {pendingTxList.map((tx) => (
-                    <TouchableOpacity
-                      key={tx.id}
-                      style={tw`border rounded-xl px-4 py-3 ${
-                        selectedTxId === tx.id
-                          ? 'border-indigo-600 bg-indigo-50'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                      onPress={() => setSelectedTxId(tx.id)}
-                    >
-                      <Text style={[tw`text-xs font-semibold`, { color: textMuted }]}>
-                        {formatDateTime(tx.date)} • {tx.subcategory}
-                      </Text>
-                      <Text style={[tw`text-sm font-bold mt-1`, { color: textPrimary }]}>
-                        Outstanding: {formatRupees(tx.pending_amount)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Amount to Pay */}
-              <View style={tw`mb-4`}>
-                <Text style={tw`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2`}>
-                  Payment Amount (Rupees)
-                </Text>
-                <TextInput
-                  style={[tw`border rounded-xl px-4 py-3 text-sm font-bold`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
-                  placeholder="0.00"
-                  placeholderTextColor={textMuted}
-                  keyboardType="numeric"
-                  value={payAmountStr}
-                  onChangeText={setPayAmountStr}
-                />
-              </View>
-
-              {/* Payment Method */}
-              <View style={tw`mb-4`}>
-                <Text style={tw`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2`}>
-                  Payment Method
-                </Text>
-                <View style={tw`flex-row gap-2`}>
-                  {['UPI', 'Cash', 'Debit Card', 'Credit Card'].map((method) => (
-                    <TouchableOpacity
-                      key={method}
-                      style={tw`flex-1 border rounded-xl py-2.5 items-center ${
-                        payMethod === method
-                          ? 'border-indigo-600 bg-indigo-50'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                      onPress={() => setPayMethod(method)}
-                    >
-                      <Text style={tw`text-xs font-bold ${
-                        payMethod === method ? 'text-indigo-600' : 'text-gray-600'
-                      }`}>
-                        {method}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Notes */}
-              <View style={tw`mb-6`}>
-                <Text style={tw`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2`}>
-                  Notes (Optional)
-                </Text>
-                <TextInput
-                  style={[tw`border rounded-xl px-4 py-3 text-sm`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
-                  placeholder="e.g. Paid via PhonePe"
-                  placeholderTextColor={textMuted}
-                  value={payDesc}
-                  onChangeText={setPayDesc}
-                />
-              </View>
-
-              {/* Submit */}
-              <TouchableOpacity
-                style={tw`bg-indigo-600 rounded-xl py-3.5 items-center justify-center shadow-md mb-4`}
-                onPress={handleRecordPayment}
-                disabled={isLoading}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={tw`flex-1`}
+          >
+            <View style={tw`flex-1 justify-end bg-black/50`}>
+              <ScrollView
+                style={[tw`rounded-t-3xl max-h-[85%]`, { backgroundColor: cardBg }]}
+                contentContainerStyle={tw`p-6 pb-12`}
+                keyboardShouldPersistTaps="handled"
               >
-                {isLoading ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
-                ) : (
-                  <Text style={tw`text-white text-base font-bold`}>Confirm Payment</Text>
-                )}
-              </TouchableOpacity>
+                <View style={tw`flex-row justify-between items-center mb-5`}>
+                  <Text style={[tw`text-lg font-bold`, { color: textPrimary }]}>
+                    Pay → {activeAccount.name}
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
+                    <Text style={[tw`font-bold text-sm`, { color: textMuted }]}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Transaction Selector */}
+                <View style={tw`mb-4`}>
+                  <Text style={tw`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2`}>
+                    Choose Entry to Pay
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={tw`flex-row gap-2`}>
+                    {pendingTxList.map((tx) => (
+                      <TouchableOpacity
+                        key={tx.id}
+                        style={tw`border rounded-xl px-4 py-3 ${
+                          selectedTxId === tx.id
+                            ? 'border-indigo-600 bg-indigo-50'
+                            : 'border-gray-200 bg-gray-50'
+                        }`}
+                        onPress={() => setSelectedTxId(tx.id)}
+                      >
+                        <Text style={[tw`text-xs font-semibold`, { color: textMuted }]}>
+                          {formatDateTime(tx.date)} • {tx.subcategory}
+                        </Text>
+                        <Text style={[tw`text-sm font-bold mt-1`, { color: textPrimary }]}>
+                          Outstanding: {formatRupees(tx.pending_amount)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                {/* Amount to Pay */}
+                <View style={tw`mb-4`}>
+                  <Text style={tw`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2`}>
+                    Payment Amount (Rupees)
+                  </Text>
+                  <TextInput
+                    style={[tw`border rounded-xl px-4 py-3 text-sm font-bold`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
+                    placeholder="0.00"
+                    placeholderTextColor={textMuted}
+                    keyboardType="numeric"
+                    value={payAmountStr}
+                    onChangeText={setPayAmountStr}
+                  />
+                </View>
+
+                {/* Payment Method */}
+                <View style={tw`mb-4`}>
+                  <Text style={tw`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2`}>
+                    Payment Method
+                  </Text>
+                  <View style={tw`flex-row gap-2`}>
+                    {['UPI', 'Cash', 'Debit Card', 'Credit Card'].map((method) => (
+                      <TouchableOpacity
+                        key={method}
+                        style={tw`flex-1 border rounded-xl py-2.5 items-center ${
+                          payMethod === method
+                            ? 'border-indigo-600 bg-indigo-50'
+                            : 'border-gray-200 bg-gray-50'
+                        }`}
+                        onPress={() => setPayMethod(method)}
+                      >
+                        <Text style={tw`text-xs font-bold ${
+                          payMethod === method ? 'text-indigo-600' : 'text-gray-600'
+                        }`}>
+                          {method}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Notes */}
+                <View style={tw`mb-6`}>
+                  <Text style={tw`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2`}>
+                    Notes (Optional)
+                  </Text>
+                  <TextInput
+                    style={[tw`border rounded-xl px-4 py-3 text-sm`, { backgroundColor: isDark ? '#374151' : '#f9fafb', borderColor, color: textPrimary }]}
+                    placeholder="e.g. Paid via PhonePe"
+                    placeholderTextColor={textMuted}
+                    value={payDesc}
+                    onChangeText={setPayDesc}
+                  />
+                </View>
+
+                {/* Submit */}
+                <TouchableOpacity
+                  style={tw`bg-indigo-600 rounded-xl py-3.5 items-center justify-center shadow-md mb-4`}
+                  onPress={handleRecordPayment}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#ffffff" size="small" />
+                  ) : (
+                    <Text style={tw`text-white text-base font-bold`}>Confirm Payment</Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
       )}
     </SafeAreaView>
