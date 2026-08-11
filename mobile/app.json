@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#F8F8F8"
     },
     "ios": {
       "supportsTablet": false
@@ -18,7 +18,7 @@
       "package": "com.apnahisab.app",
       "versionCode": 8,
       "adaptiveIcon": {
-        "backgroundColor": "#000000",
+        "backgroundColor": "#F8F8F8",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
